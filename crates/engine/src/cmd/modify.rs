@@ -3,7 +3,8 @@
 
 use cadcraft_doc::{Entity, EntityKind, Handle, Prim};
 use cadcraft_geom::{
-    Arc, Circle, Line, Mat3, PolyVertex, Polyline, Segment, TAU, Vec2, angle_in_sweep, ccw_sweep, intersect_ext, line_line_infinite, norm_angle,
+    Arc, Circle, Curve, Line, Mat3, PolyVertex, Polyline, Segment, TAU, Vec2, angle_in_sweep, ccw_sweep, intersect_ext, line_line_infinite,
+    norm_angle,
 };
 use serde_json::{Value, json};
 
@@ -34,7 +35,7 @@ use select_then::{DisplaceM, Op, SelectThen};
 use stretch::{StretchM, run_stretch};
 pub(crate) use transform::transform_entities;
 use transform::{run_copy, run_erase, run_mirror, run_move, run_rotate, run_scale};
-pub(crate) use trim::{Edges, extend, trim};
+pub(crate) use trim::{Edges, cut_hits, extend, trim};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
