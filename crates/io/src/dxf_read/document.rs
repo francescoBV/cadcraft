@@ -154,7 +154,13 @@ pub(super) fn setup_layouts(d: &mut Drawing, layout_objs: &mut [LayoutDef], rx: 
         if name.eq_ignore_ascii_case("Model") {
             continue;
         }
-        d.layouts.push(Layout { page: page.clone(), ..Layout::new(name, *order) });
+        let mut page = page.clone();
+        // Plot paper units are kept only where saving would write others (see PageSetup).
+        let units = u8::from(cadcraft_render::paper::page_unit_mm(d, &page) == 1.0);
+        if page.plot_paper_units == Some(units) {
+            page.plot_paper_units = None;
+        }
+        d.layouts.push(Layout { page, ..Layout::new(name, *order) });
         if let Some(bname) = rx.brs.get(br) {
             paper_block_for.insert(bname.to_ascii_uppercase(), name.clone());
         }

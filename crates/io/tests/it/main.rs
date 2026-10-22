@@ -21,6 +21,7 @@ mod dwg_layout_owner;
 #[cfg(not(target_arch = "wasm32"))]
 mod dwg_roundtrip_losses;
 mod dwt_template;
+mod dxf_layout_style_fidelity;
 mod dxf_versions;
 mod dynblock_read;
 mod entity_props_roundtrip;

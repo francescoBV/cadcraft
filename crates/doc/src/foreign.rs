@@ -70,6 +70,10 @@ pub struct Foreign {
     /// proxy objects or entities: a proxy's class number (group 91) is 500 plus its class's place
     /// here, and saving renumbers it to the written CLASSES (#1812).
     pub class_order: Vec<String>,
+    /// The shape files of the file's unnamed shape styles (STYLE records with flag 1 and no name,
+    /// which AutoCAD adds when a shape file is loaded or a linetype uses one), written back as
+    /// such records.
+    pub shape_files: Vec<String>,
     /// The file's data store section (ACDSDATA, AutoCAD 2013 and later), as read: its groups
     /// after the section name. It holds the ACIS geometry of 3D solids, regions, bodies and
     /// surfaces, which from 2013 on those entities don't carry themselves: each `ACDSRECORD`
@@ -86,6 +90,7 @@ impl Foreign {
             && self.classes.is_empty()
             && self.targets.is_empty()
             && self.class_order.is_empty()
+            && self.shape_files.is_empty()
             && self.data_store.is_empty()
     }
 
