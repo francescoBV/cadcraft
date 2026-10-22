@@ -1,6 +1,6 @@
 # Where CADCraft falls short of AutoCAD
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-25 · **Change:** minor (DIMTFILL limits in the `*D` block, EXPLODE and DXF: F7 updated) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-27 · **Change:** minor (records of other programs' files keep their handles on save: FF7 narrowed) · **Target:** Autodesk AutoCAD 2027
 
 Every known shortfall, one row each, ranked within each section by user impact. This is the work
 list: agents pick from here (top of a section first), and remove or update a row in the same PR
@@ -79,7 +79,7 @@ Detail: [file-format-parity.md](file-format-parity.md).
 | FF4 | Code-page leftovers (pre-2007 DXF read in their `$DWGCODEPAGE` landed, #505): Johab (ANSI_1361) and DOS 855/857/860–865/869 read as ANSI_1252; saving declares `ANSI_1252` instead of the file's code page (the text is pure ASCII, so still correct); acadrust approximates DOS code pages in pre-2007 DWG (DOS437 as 866, DOS850 as 1252) | Low | 1–2 |
 | FF5 | **[alpha blocker]** Real-file corpus (`storytold/cadcraft-corpus`), open → save → reopen tests, black-box check in AutoCAD | High | 10–15 + human |
 | FF6 | **[alpha blocker]** DWG throughput: a 10 MB DWG took ~2 min to fail (#57) | High for real projects | 6–10 |
-| FF7 | Table record and object handles from other programs' files are renumbered on the first save (entity handles are kept; `*D` blocks no longer duplicate and once reopened, CADCraft's own files keep every handle across saves, #495) | Low | 4–6 |
+| FF7 | Handles from other programs' files: table records and tables, blocks, the objects CADCraft rewrites from its model (dictionaries, layouts, scales), the objects it keeps unmodelled, attributes, vertices and sequence ends keep their handles on save (2026-10-22; entity handles were kept already, and CADCraft's own files keep every handle across saves, #495). Left: a record whose old handle is now another record's gets a new one; renamed table records and blocks get new handles | Low | 1–2 |
 | FF8 | SHX fonts (shape and big fonts) not read | Medium-high (text metrics differ) | 8–12 |
 | FF9 | `.pc3` plotter configuration files; linetype shape (SHX) elements are skipped (templates and `.dwt`, user `.lin`/`.pat` and `.pgp` alias files landed, #552; `.ctb`/`.stb`, #410) | Low-medium | 5–10 |
 | FF10 | PDF import and underlays (PDFATTACH); raster image attach (IMAGEATTACH). PDF export has real text in embedded TrueType subsets, PDF layers, several sheets per file and hyperlinks (#567, #571) | Medium | 20–35 |
@@ -150,6 +150,7 @@ Detail: [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | minor | DXF save gives every record CADCraft writes itself the handle it had in the file read, by role (`Foreign::handles`: table records and tables, blocks and ENDBLKs, the named object dictionary and its entries, annotation scales by name, extension dictionaries of entities, attributes, vertices and SEQENDs), and kept objects keep theirs; references follow, `$HANDSEED` stays above them: FF7 narrowed |
 | 2026-10-25 | minor | DIMTFILL limits: with DIMTFILL 1 (the drawing's background color) the written `*D` block and EXPLODE keep no background mask (a WIPEOUT over the text box would), and a true-color DIMTFILLCLR is written to DXF as the nearest ACI: F7 updated |
 | 2026-10-24 | minor | COMPAREEXPORT (typed, or Export on the comparison bar) opens the comparison as a new untitled drawing, `compare_<this> vs <other>.dwg`: this drawing's objects in one group and the other drawing's differing objects in a second group, in the comparison colors (green, red, gray for objects in both), block contents and style colors included: F22 narrowed |
 | 2026-10-24 | minor | DIMTFILL and DIMTFILLCLR: a dimension's text background (none, the drawing's background color, or a color) hides what is drawn under the text; SETVAR, DIMOVERRIDE and style fields, DIMSTYLE groups 69 and 70 in DXF from R2007 (CADCraft xdata before), and a SOLID in the `*D` block and from EXPLODE for DIMTFILL 2: F7 narrowed |

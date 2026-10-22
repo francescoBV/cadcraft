@@ -70,6 +70,15 @@ pub struct Foreign {
     /// proxy objects or entities: a proxy's class number (group 91) is 500 plus its class's place
     /// here, and saving renumbers it to the written CLASSES (#1812).
     pub class_order: Vec<String>,
+    /// The file handle of every record CADCraft writes itself, by role (gap FF7): table records
+    /// and tables (`("LAYER", "WALLS")`, `("TABLE", "LAYER")`), blocks and their ends
+    /// (`("BLOCK", "DOOR")`, `("ENDBLK", "DOOR")`), the named object dictionary and its entries
+    /// (`("NOD", "")`, `("NOD", "ACAD_LAYOUT")`, `("NOD/ACAD_LAYOUT", "LAYOUT1")`), extension
+    /// dictionaries of entities and their entries (`("XDICT", "1A2")`, `("XDICT/1A2",
+    /// "ACAD_DIMASSOC")`) and the attributes and sequence ends of block references
+    /// (`("ATTRIB", "1A2#0")`, `("SEQEND", "1A2")`). Saving gives each record it writes in one of
+    /// these roles the handle it had, when no other written record has that handle.
+    pub handles: BTreeMap<ForeignKey, Handle>,
     /// The file's data store section (ACDSDATA, AutoCAD 2013 and later), as read: its groups
     /// after the section name. It holds the ACIS geometry of 3D solids, regions, bodies and
     /// surfaces, which from 2013 on those entities don't carry themselves: each `ACDSRECORD`
@@ -86,6 +95,7 @@ impl Foreign {
             && self.classes.is_empty()
             && self.targets.is_empty()
             && self.class_order.is_empty()
+            && self.handles.is_empty()
             && self.data_store.is_empty()
     }
 
