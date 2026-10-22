@@ -68,7 +68,8 @@ pub struct Settings {
     pub acadlspasdoc: bool,
     /// CMDECHO: kept for routines that switch command echo around their commands; no command reads it yet.
     pub cmdecho: bool,
-    /// FILEDIA: kept for routines that switch file dialogs off around a script; no command reads it yet.
+    /// FILEDIA: 1 file commands typed or chosen from a menu open the interface's file dialogs; 0
+    /// they ask on the command line (SAVEAS), as scripts and routines that switch dialogs off expect.
     pub filedia: bool,
     pub pickadd: bool,
     /// PICKDRAG: false = two-click windows (0), true = clicks or dragging (2).

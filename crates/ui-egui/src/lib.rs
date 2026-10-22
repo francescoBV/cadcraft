@@ -46,6 +46,7 @@ pub mod palettes;
 pub mod parametric;
 pub mod plotstyles;
 pub mod quick;
+pub mod saving;
 pub mod shortcut_menus;
 pub mod theme;
 #[cfg(not(target_arch = "wasm32"))]
@@ -281,6 +282,8 @@ pub struct CadApp {
     pub gpu_notice: Option<autosave::GpuNotice>,
     /// The Command Aliases dialog while open ([`aliasdlg`]).
     pub alias_dlg: Option<aliasdlg::AliasDlgState>,
+    /// The Save As window (version and encoding) while open ([`saving`]).
+    pub save_dlg: Option<saving::SaveDlg>,
     /// The Hatch and Gradient dialog while open or picking ([`hatchdlg`]).
     pub hatch_dlg: Option<hatchdlg::HatchDlgState>,
     /// The Edit Block Definition dialog ([`bedit`]).
@@ -335,6 +338,7 @@ impl CadApp {
             gpu_faults: std::sync::Arc::default(),
             gpu_notice: None,
             alias_dlg: None,
+            save_dlg: None,
             hatch_dlg: None,
             bedit: bedit::State::default(),
             #[cfg(not(target_arch = "wasm32"))]
