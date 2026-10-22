@@ -25,6 +25,13 @@ pub(super) fn header(tags: &[Tag], d: &mut Drawing) {
                 }
                 continue;
             }
+            let code = match vals.as_slice() {
+                [x, _, _] if x.code == 10 => -3,
+                [x, _] if x.code == 10 => -2,
+                [v] => v.code,
+                _ => continue,
+            };
+            d.header.set_code(&name, code);
             let hv = match vals.as_slice() {
                 [x, y, z] if x.code == 10 => HVal::Point(Vec3::new(x.f64(), y.f64(), z.f64())),
                 [x, y] if x.code == 10 => HVal::Point(Vec3::new(x.f64(), y.f64(), 0.0)),

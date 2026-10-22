@@ -3,14 +3,15 @@ use super::blocks::{arrow_block_entities, dim_block_entities, dim_block_plan, re
 use super::common::annotative_xdata;
 use super::ctx::{AssocObj, Ctx};
 use super::entity::{entity, hatch_reactors};
-use super::header::{code_page, header_vars};
+use super::header::{code_page, header_vars, kept_header_vars};
 use super::layout::{paper_views, record_head, sheet_first, table_head, vport_table};
 use super::objects::{cadcraft_fonts_name, group_obj, mleader_style_obj, scale_list, table_style_obj};
 use super::*;
 
 /// The drawing's DXF tags, declaring `version` in `$ACADVER`, with what `target` (the version the
-/// file ends up in: `version`, or the DWG version the bridge writes) has.
-pub(super) fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Tag> {
+/// file ends up in: `version`, or the DWG version the bridge writes) has. `bridge`: for the DWG
+/// bridge, which keeps the header variables CADCraft doesn't use itself.
+pub(super) fn tags_for(d: &Drawing, version: Version, target: Version, bridge: bool) -> Vec<Tag> {
     // An in-place block edit in progress is not written: the drawing as before it.
     let committed = d.committed();
     let d: &Drawing = &committed;
@@ -214,6 +215,7 @@ pub(super) fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Ta
     let layout_handles: Vec<String> = ps_brs.iter().map(|_| w.h()).collect();
 
     // ---------------- HEADER ----------------
+    let header_at = w.t.len();
     w.s(0, "SECTION");
     w.s(2, "HEADER");
     w.s(9, "$ACADVER");
@@ -227,7 +229,15 @@ pub(super) fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Ta
         w.s(9, "$EXTMAX");
         w.p(10, ext.max.to3(0.0));
     }
-    header_vars(&mut w, d);
+    // The variables read that CADCraft doesn't write from its model, and the dimension variables
+    // read that override the current style, as read: not into an older version than the file's,
+    // which may not have them. The DWG bridge gets them too, so the DWG keeps them: its DXF
+    // declares R2000, but the DWG is written in `target`.
+    let keep_read = (if bridge { target } else { version }) >= crate::save_version(d);
+    header_vars(&mut w, d, keep_read);
+    if keep_read {
+        kept_header_vars(&mut w, d, header_at);
+    }
     let seed_pos = w.t.len();
     w.s(9, "$HANDSEED");
     w.s(5, "0");
@@ -906,6 +916,7 @@ pub(super) fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Ta
         *t = Tag::s(5, seed);
     }
     crate::dxf_raw::finish(&mut w.t, d);
+    crate::dxf_raw::null_dangling_header_refs(&mut w.t);
     crate::dxf_raw::data_store(&mut w.t, d, target >= Version::R2013);
     add_class_instance_counts(&mut w.t);
     mark_xrefs(&mut w.t, d);
