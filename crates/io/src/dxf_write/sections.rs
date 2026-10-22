@@ -219,7 +219,7 @@ pub(super) fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Ta
     w.s(9, "$ACADVER");
     w.s(1, version.code());
     w.s(9, "$DWGCODEPAGE");
-    w.s(3, code_page(d, version));
+    w.s(3, code_page(d));
     let ext = d.extents(&Space::Model);
     if !ext.is_empty() {
         w.s(9, "$EXTMIN");
