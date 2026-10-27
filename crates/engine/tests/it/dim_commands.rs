@@ -250,7 +250,7 @@ fn marks_follow_move_and_rotate_and_hostile_values_do_not_panic() {
         if let EntityKind::Dimension(dm) = &mut e.kind {
             dm.marks.oblique = Some(f64::NAN);
             dm.marks.jog_line = Some(cadcraft_engine::geom::Vec3::new(f64::INFINITY, 0.0, 0.0));
-            dm.marks.breaks.push(cadcraft_engine::doc::DimBreak { at: Default::default(), size: f64::NAN, auto: false });
+            dm.marks.breaks.push(cadcraft_engine::doc::DimBreak { at: Default::default(), size: f64::NAN, auto: false, object: None });
             dm.marks.inspect = Some(cadcraft_engine::doc::Inspection { shape: 9, label: "x".into(), rate: String::new() });
         }
     })

@@ -1,11 +1,15 @@
 //! Associative dimensions: definition points attached to objects (`Dimension::assoc`) follow
-//! them. [`update`] runs after every command that changed the drawing (from
+//! them, and DIMBREAK's auto breaks follow the objects that make them ([`update_breaks`]).
+//! [`update`] and [`update_breaks`] run after every command that changed the drawing (from
 //! `Session::execute` and when an interactive command finishes).
 
 use std::sync::Arc;
 
 use cadcraft_doc::{AssocSnap, DimAssoc, DimKind, Dimension, Drawing, EntityKind, Handle, Space};
 use cadcraft_geom::{Vec2, Vec3};
+
+/// Most crossings one object makes with one dimension (DIMBREAK).
+const MAX_CROSSINGS: usize = 1000;
 
 /// Definition point names in the order they are tried.
 const POINTS: [&str; 5] = ["defpt", "p13", "p14", "p15", "p16"];
@@ -332,6 +336,106 @@ pub fn update(after: &mut Arc<Drawing>, before: &Drawing) -> usize {
     n
 }
 
+/// Where a dimension's drawn lines cross an object's primitives (at most [`MAX_CROSSINGS`]).
+pub(crate) fn crossings(dm_lines: &[Vec<Vec2>], prims: &[cadcraft_doc::Prim]) -> Vec<Vec2> {
+    let mut out = Vec::new();
+    for l in dm_lines {
+        for w in l.windows(2) {
+            let seg = cadcraft_geom::Segment::Line(cadcraft_geom::Line::new(w[0], w[1]));
+            for p in prims {
+                let pts = match p {
+                    cadcraft_doc::Prim::Seg(o) => cadcraft_geom::intersect_segments(&seg, o),
+                    cadcraft_doc::Prim::Circle(c) => cadcraft_geom::line_circle(&cadcraft_geom::Line::new(w[0], w[1]), c)
+                        .into_iter()
+                        .filter(|(_, t)| (-1e-9..=1.0 + 1e-9).contains(t))
+                        .map(|(q, _)| q)
+                        .collect(),
+                    cadcraft_doc::Prim::Infinite { base, dir, ray } => cadcraft_geom::line_line_infinite(w[0], w[1], *base, *base + *dir)
+                        .filter(|(_, t, u)| (-1e-9..=1.0 + 1e-9).contains(t) && (!ray || *u >= -1e-9))
+                        .map(|(q, _, _)| vec![q])
+                        .unwrap_or_default(),
+                    _ => Vec::new(),
+                };
+                for q in pts {
+                    if out.len() >= MAX_CROSSINGS {
+                        return out;
+                    }
+                    if !out.iter().any(|o: &Vec2| o.dist(q) < 1e-9) {
+                        out.push(q);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The auto breaks (DIMBREAK) of dimension `dm` in drawing `d` again: each object that makes
+/// some breaks them where it crosses the dimension now (their size kept); an object erased takes
+/// its breaks along. Manual breaks and breaks of no object stay.
+pub fn rebreak(d: &Drawing, dm: &Dimension) -> Vec<cadcraft_doc::DimBreak> {
+    let mut plain = dm.clone();
+    plain.marks.breaks.clear();
+    let g = cadcraft_render::dimension_in(d, &plain);
+    let mut out: Vec<cadcraft_doc::DimBreak> = Vec::new();
+    let mut done: Vec<Handle> = Vec::new();
+    for b in &dm.marks.breaks {
+        let Some(o) = b.object.filter(|_| b.auto) else {
+            out.push(b.clone());
+            continue;
+        };
+        if done.contains(&o) {
+            continue;
+        }
+        done.push(o);
+        let Some(e) = d.entity(o) else { continue };
+        let pts = crossings(&g.lines, &e.kind.prims());
+        out.extend(pts.into_iter().map(|q| cadcraft_doc::DimBreak { at: Vec3::new(q.x, q.y, 0.0), size: b.size, auto: true, object: Some(o) }));
+    }
+    out
+}
+
+/// After a change: redo the auto breaks of every dimension that changed, or whose breaking
+/// objects did. Returns the number of dimensions updated.
+pub fn update_breaks(after: &mut Arc<Drawing>, before: &Drawing) -> usize {
+    let mut changes: Vec<(Handle, Vec<cadcraft_doc::DimBreak>)> = Vec::new();
+    {
+        let d: &Drawing = after;
+        let stores = std::iter::once(&d.model).chain(d.layouts.iter().map(|l| &l.entities));
+        for store in stores {
+            for e in store.iter() {
+                let EntityKind::Dimension(dm) = &e.kind else { continue };
+                let objects: Vec<Handle> = dm.marks.breaks.iter().filter(|b| b.auto).filter_map(|b| b.object).collect();
+                if objects.is_empty() {
+                    continue;
+                }
+                let touched = src_changed(before, d, e.handle) || objects.iter().any(|o| src_changed(before, d, *o));
+                if !touched {
+                    continue;
+                }
+                let breaks = rebreak(d, dm);
+                if breaks != dm.marks.breaks {
+                    changes.push((e.handle, breaks));
+                }
+            }
+        }
+    }
+    if changes.is_empty() {
+        return 0;
+    }
+    let d = Arc::make_mut(after);
+    let n = changes.len();
+    for (h, breaks) in changes {
+        let _ = d.modify_entity(h, |e| {
+            if let EntityKind::Dimension(dm) = &mut e.kind {
+                dm.marks.breaks = breaks;
+                dm.block = None;
+            }
+        });
+    }
+    n
+}
+
 /// The post-command pass: called by `Session::execute` and when an interactive command
 /// finishes. `uid` (when known) is the document the command started in.
 pub fn after_command(s: &mut crate::Session, before: Option<&Arc<Drawing>>, uid: Option<u64>) {
@@ -342,6 +446,7 @@ pub fn after_command(s: &mut crate::Session, before: Option<&Arc<Drawing>>, uid:
         && !Arc::ptr_eq(before, &st.doc)
     {
         update(&mut st.doc, before);
+        update_breaks(&mut st.doc, before);
         notes = crate::cmd::hatch::refill_associative(&mut st.doc, before);
     }
     notes.into_iter().for_each(|n| s.echo(n));

@@ -130,6 +130,8 @@ pub struct DimBreak {
     pub size: f64,
     /// Made by DIMBREAK Auto (recomputed by the next Auto) rather than picked by hand.
     pub auto: bool,
+    /// The object whose crossing made an automatic break, so the break follows it when it moves.
+    pub object: Option<Handle>,
 }
 
 /// An inspection dimension (DIMINSPECT).

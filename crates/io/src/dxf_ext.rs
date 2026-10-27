@@ -476,7 +476,7 @@ pub(crate) fn arclen_xdata(center: cadcraft_geom::Vec3) -> Vec<Tag> {
 
 /// Dimension marks as CADCraft xdata (`1000 MARKS`, `1002 {`, items, `1002 }`): `1000 JOGLINE`
 /// and a point; `1000 JOGGED`, the centre and the jog point; `1000 BREAK`, a point, `1040` size
-/// and `1070` auto; `1000 INSPECT`, `1070` shape, `1000` label and `1000` rate. Points are
+/// and `1070` auto (then `1005`, the object that breaks it, when it follows one); `1000 INSPECT`, `1070` shape, `1000` label and `1000` rate. Points are
 /// `1010/1020/1030`. The oblique angle is the standard group 52 instead.
 pub(crate) fn marks_xdata(m: &cadcraft_doc::DimMarks) -> Vec<Tag> {
     let pt = |v: &mut Vec<Tag>, p: cadcraft_geom::Vec3| v.extend([Tag::f(1010, p.x), Tag::f(1020, p.y), Tag::f(1030, p.z)]);
@@ -494,6 +494,9 @@ pub(crate) fn marks_xdata(m: &cadcraft_doc::DimMarks) -> Vec<Tag> {
         v.push(Tag::s(1000, "BREAK"));
         pt(&mut v, b.at);
         v.extend([Tag::f(1040, b.size), Tag::i(1070, i64::from(b.auto))]);
+        if let Some(h) = b.object {
+            v.push(Tag::s(1005, h.hex()));
+        }
     }
     if let Some(i) = &m.inspect {
         v.extend([Tag::s(1000, "INSPECT"), Tag::i(1070, i64::from(i.shape)), Tag::s(1000, i.label.clone()), Tag::s(1000, i.rate.clone())]);
@@ -530,8 +533,9 @@ pub(crate) fn read_marks(tags: &[Tag]) -> cadcraft_doc::DimMarks {
             "BREAK" => {
                 let size = list.get(i + 4).filter(|t| t.code == 1040).map(Tag::f64).filter(|x| x.is_finite() && *x > 0.0);
                 let auto = list.get(i + 5).filter(|t| t.code == 1070).is_some_and(|t| t.i64() != 0);
+                let object = list.get(i + 6).filter(|t| t.code == 1005).and_then(|t| Handle::parse_hex(&t.str())).filter(|h| h.0 != 0);
                 if let (Some(at), Some(size)) = (point(i + 1), size) {
-                    m.breaks.push(cadcraft_doc::DimBreak { at, size, auto });
+                    m.breaks.push(cadcraft_doc::DimBreak { at, size, auto, object });
                 }
             }
             "INSPECT" => {

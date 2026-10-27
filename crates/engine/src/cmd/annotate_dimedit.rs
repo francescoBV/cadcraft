@@ -2,7 +2,7 @@
 //! DIMINSPECT. Each has a JSON form; the prompt sequences run the same JSON form.
 
 use cadcraft_doc::{DimBreak, DimKind, Dimension, EntityKind, Handle, Inspection, JoggedRadius, Prim};
-use cadcraft_geom::{Segment, Vec2};
+use cadcraft_geom::Vec2;
 use serde_json::{Value, json};
 
 use super::super::helpers::v3;
@@ -38,7 +38,7 @@ pub(super) fn specs() -> Vec<CommandSpec> {
             .interactive(|_| Ok(Box::new(JogLineM::default()))),
         CommandSpec::new("dimbreak", "Dimension Break", run_dimbreak)
             .menu(&["Dimension", "Dimension Break"])
-            .params("{handles?, mode?: auto|manual|remove (default auto), objects?: [hex] (auto: the objects that break; default all crossing objects), first?/second?: [x,y] (manual), size?: number (default 0.125 × DIMSCALE)}")
+            .params("{handles?, mode?: auto|manual|remove (default auto), objects?: [hex] (auto: the objects that break; default all crossing objects), first?/second?: [x,y] (manual), size?: number (default 0.125 × DIMSCALE); auto breaks follow the objects that make them}")
             .interactive(|_| Ok(Box::new(DimBreakM::default()))),
         CommandSpec::new("diminspect", "Inspection", run_diminspect)
             .menu(&["Dimension", "Inspection"])
@@ -455,40 +455,6 @@ impl Interactive for JogLineM {
 
 // ---------------- DIMBREAK ----------------
 
-/// Where the dimension's drawn lines cross the objects: (point, direction of the line there).
-fn crossings(dm_lines: &[Vec<Vec2>], prims: &[Prim]) -> Vec<Vec2> {
-    let mut out = Vec::new();
-    for l in dm_lines {
-        for w in l.windows(2) {
-            let seg = Segment::Line(cadcraft_geom::Line::new(w[0], w[1]));
-            for p in prims {
-                let pts = match p {
-                    Prim::Seg(o) => cadcraft_geom::intersect_segments(&seg, o),
-                    Prim::Circle(c) => cadcraft_geom::line_circle(&cadcraft_geom::Line::new(w[0], w[1]), c)
-                        .into_iter()
-                        .filter(|(_, t)| (-1e-9..=1.0 + 1e-9).contains(t))
-                        .map(|(q, _)| q)
-                        .collect(),
-                    Prim::Infinite { base, dir, ray } => cadcraft_geom::line_line_infinite(w[0], w[1], *base, *base + *dir)
-                        .filter(|(_, t, u)| (-1e-9..=1.0 + 1e-9).contains(t) && (!ray || *u >= -1e-9))
-                        .map(|(q, _, _)| vec![q])
-                        .unwrap_or_default(),
-                    _ => Vec::new(),
-                };
-                for q in pts {
-                    if out.len() >= MAX_AUTO_BREAKS {
-                        return out;
-                    }
-                    if !out.iter().any(|o: &Vec2| o.dist(q) < 1e-9) {
-                        out.push(q);
-                    }
-                }
-            }
-        }
-    }
-    out
-}
-
 fn run_dimbreak(s: &mut Session, p: &Value) -> Result<Value> {
     let hs = dims_of(s, &targets(s, p)?);
     if hs.is_empty() {
@@ -514,7 +480,7 @@ fn run_dimbreak(s: &mut Session, p: &Value) -> Result<Value> {
             if a.near(b, 1e-12) {
                 return Err(bad("dimbreak", "`first` and `second` must differ"));
             }
-            let br = DimBreak { at: v3(a.mid(b)), size: a.dist(b), auto: false };
+            let br = DimBreak { at: v3(a.mid(b)), size: a.dist(b), auto: false, object: None };
             let n = edit_dims(s, &hs[..1], &|dm| {
                 dm.marks.breaks.push(br.clone());
                 true
@@ -544,14 +510,23 @@ fn run_dimbreak(s: &mut Session, p: &Value) -> Result<Value> {
                 let mut plain = dm.clone();
                 plain.marks.breaks.clear();
                 let g = cadcraft_render::dimension_in(d, &plain);
-                let prims: Vec<Prim> = others.iter().filter(|(o, _)| o != h).flat_map(|(_, p)| p.iter().cloned()).collect();
-                plan.push((*h, crossings(&g.lines, &prims)));
+                // Each break remembers the object that makes it, so it follows that object.
+                let mut breaks = Vec::new();
+                for (o, prims) in others.iter().filter(|(o, _)| o != h) {
+                    if breaks.len() >= MAX_AUTO_BREAKS {
+                        break;
+                    }
+                    let pts = crate::assoc::crossings(&g.lines, prims);
+                    breaks.extend(pts.into_iter().map(|q| DimBreak { at: v3(q), size, auto: true, object: Some(*o) }));
+                }
+                breaks.truncate(MAX_AUTO_BREAKS);
+                plan.push((*h, breaks));
             }
             let mut n = 0;
-            for (h, pts) in plan {
+            for (h, breaks) in plan {
                 n += edit_dims(s, &[h], &|dm| {
                     dm.marks.breaks.retain(|b| !b.auto);
-                    dm.marks.breaks.extend(pts.iter().map(|q| DimBreak { at: v3(*q), size, auto: true }));
+                    dm.marks.breaks.extend(breaks.iter().cloned());
                     true
                 })?;
             }

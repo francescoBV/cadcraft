@@ -44,8 +44,8 @@ fn dimension_marks_roundtrip() {
         oblique: Some(60f64.to_radians()),
         jog_line: Some(Vec3::new(2.0, 3.0, 0.0)),
         breaks: vec![
-            DimBreak { at: Vec3::new(4.0, 3.0, 0.0), size: 0.125, auto: true },
-            DimBreak { at: Vec3::new(7.0, 3.0, 0.0), size: 0.5, auto: false },
+            DimBreak { at: Vec3::new(4.0, 3.0, 0.0), size: 0.125, auto: true, object: None },
+            DimBreak { at: Vec3::new(7.0, 3.0, 0.0), size: 0.5, auto: false, object: None },
         ],
         inspect: Some(Inspection { shape: 1, label: "QC".into(), rate: "25%".into() }),
         ..Default::default()
@@ -75,7 +75,7 @@ fn damaged_marks_are_skipped() {
     let mut d = Drawing::new_imperial();
     let m = DimMarks {
         jog_line: Some(Vec3::new(2.0, 3.0, 0.0)),
-        breaks: vec![DimBreak { at: Vec3::new(4.0, 3.0, 0.0), size: 0.125, auto: false }],
+        breaks: vec![DimBreak { at: Vec3::new(4.0, 3.0, 0.0), size: 0.125, auto: false, object: None }],
         inspect: Some(Inspection { shape: 0, label: "A".into(), rate: "B".into() }),
         ..Default::default()
     };
@@ -91,4 +91,43 @@ fn damaged_marks_are_skipped() {
     let back = read_dxf(bad.as_bytes()).unwrap();
     let got = marks_of(&back);
     assert_eq!(got.first(), Some(&DimMarks::default()), "{got:?}");
+}
+
+/// An automatic DIMBREAK break names the object that makes it (`1005` in the BREAK item), in DXF
+/// and through the DWG bridge, so it keeps following that object after the file is reopened.
+#[test]
+fn auto_breaks_keep_the_object_that_makes_them() {
+    let mut d = Drawing::new_imperial();
+    let line = d
+        .add(&Space::Model, Common::default(), EntityKind::Line(cadcraft_doc::Line { a: Vec3::new(4.0, -1.0, 0.0), b: Vec3::new(4.0, 5.0, 0.0) }))
+        .unwrap();
+    let marks = DimMarks {
+        breaks: vec![
+            DimBreak { at: Vec3::new(4.0, 3.0, 0.0), size: 0.3, auto: true, object: Some(line) },
+            DimBreak { at: Vec3::new(7.0, 3.0, 0.0), size: 0.5, auto: false, object: None },
+        ],
+        ..Default::default()
+    };
+    d.add(&Space::Model, Common::default(), dim(DimKind::Linear { rotation: 0.0 }, marks)).unwrap();
+    let check = |back: &Drawing, what: &str| {
+        let line = back.model.iter().find(|e| matches!(e.kind, EntityKind::Line(_))).map(|e| e.handle);
+        let br = marks_of(back).remove(0).breaks;
+        assert_eq!(br.len(), 2, "{what}");
+        assert_eq!((br[0].auto, br[0].object), (true, line), "{what}: the auto break names the line");
+        assert_eq!((br[1].auto, br[1].object), (false, None), "{what}");
+    };
+    let back = read_dxf(write_dxf(&d).as_bytes()).unwrap();
+    check(&back, "DXF");
+    check(&read_dxf(write_dxf(&back).as_bytes()).unwrap(), "DXF again");
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let dwg = cadcraft_io::write(&back, "a.dwg").unwrap();
+        check(&cadcraft_io::read(&dwg, "a.dwg").unwrap(), "DWG");
+    }
+    // A damaged or null handle is no object.
+    let text = write_dxf(&d);
+    let bad = text.replacen(&format!("1005\r\n{}\r\n", line.hex()), "1005\r\n0\r\n", 1);
+    assert_ne!(bad, text);
+    let br = marks_of(&read_dxf(bad.as_bytes()).unwrap()).remove(0).breaks;
+    assert_eq!(br.first().map(|b| b.object), Some(None));
 }
