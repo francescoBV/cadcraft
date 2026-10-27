@@ -191,7 +191,12 @@ impl GripEdit {
         match i {
             Input::Point(p) => self.act(s, action, Some(p), None),
             Input::Deferred(d) => self.act(s, action, Some(d.at), None),
-            Input::Text(t) if matches!(action, GripAction::Lengthen | GripAction::Radius) => {
+            // Hatch Angle takes an angle in the drawing's angle units.
+            Input::Text(t) if action == GripAction::HatchAngle => {
+                let a = s.angle_settings().rotation(&t).filter(|a| a.is_finite()).ok_or_else(|| other("Requires an angle or point."))?;
+                self.act(s, action, None, Some(a))
+            }
+            Input::Text(t) if action.takes_value() => {
                 let v = number(&t).filter(|v| v.is_finite()).ok_or_else(|| other("Requires a number or point."))?;
                 self.act(s, action, None, Some(v))
             }
@@ -357,6 +362,9 @@ impl Interactive for GripEdit {
                     GripAction::ToArc => ("Specify a point on the arc", Accept::POINT),
                     GripAction::Lengthen => ("Specify end point or length change", Accept::POINT_OR_NUMBER),
                     GripAction::Radius => ("Specify radius", Accept::POINT_OR_NUMBER),
+                    GripAction::HatchOrigin => ("Specify origin point", Accept::POINT),
+                    GripAction::HatchAngle => ("Specify hatch angle", Accept::POINT_OR_NUMBER),
+                    GripAction::HatchScale => ("Specify hatch scale", Accept::POINT_OR_NUMBER),
                     GripAction::RemoveVertex | GripAction::ToLine => ("", Accept::POINT),
                 };
                 Prompt::new(format!("{} {msg}", a.title()), accept).kw(&["eXit"]).base(base)
