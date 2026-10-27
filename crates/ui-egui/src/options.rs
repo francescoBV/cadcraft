@@ -46,6 +46,8 @@ pub const PROFILE_KEY: &str = "cadcraft.profile";
 
 /// The largest saved profile [`CadApp::load_profile`] reads.
 const MAX_PROFILE_BYTES: usize = 64 * 1024;
+/// The version of the saved profile ([`CadApp::profile_json`]). 2: AUTOSNAP keeps the magnet bit.
+const PROFILE_VERSION: u64 = 2;
 
 /// The longest SAVEFILEPATH the JSON form accepts.
 const MAX_PATH_CHARS: usize = 1024;
@@ -322,7 +324,7 @@ impl CadApp {
     /// already keep.
     pub fn profile_json(&self) -> String {
         json!({
-            "version": 1,
+            "version": PROFILE_VERSION,
             "sysvars": cadcraft_engine::cmd::options::profile(&self.session),
             "systemCursor": self.ui.system_cursor,
             "modelBackground": color_json(self.options.model_background),
@@ -344,6 +346,11 @@ impl CadApp {
         let Ok(v) = serde_json::from_str::<Value>(json) else { return };
         if let Some(vars) = v.get("sysvars") {
             cadcraft_engine::cmd::options::restore(&mut self.session, vars);
+            // Profiles before version 2 saved AUTOSNAP without the magnet bit, which could not be
+            // turned on then: keep the magnet on (AutoCAD's default) rather than read it as off.
+            if v.get("version").and_then(Value::as_u64).is_none_or(|n| n < 2) {
+                self.session.settings.autosnap_magnet = true;
+            }
         }
         let mut c = UiChanges::default();
         for key in

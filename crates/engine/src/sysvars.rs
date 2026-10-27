@@ -87,8 +87,8 @@ pub fn get(s: &Session, name: &str) -> Option<Value> {
         "POLARADDANG" => json!(format_angle_list(&st.polaraddang)),
         "POLARDIST" => json!(st.polardist),
         "SNAPTYPE" => json!(i32::from(st.polarsnap)),
-        // Marker, tooltip and tracking tooltip always on (1 + 4 + 32); polar 8, tracking 16.
-        "AUTOSNAP" => json!(37 + 8 * u32::from(st.polarmode) + 16 * u32::from(st.otrack)),
+        // Marker, tooltip and tracking tooltip always on (1 + 4 + 32); magnet 2, polar 8, tracking 16.
+        "AUTOSNAP" => json!(37 + 2 * u32::from(st.autosnap_magnet) + 8 * u32::from(st.polarmode) + 16 * u32::from(st.otrack)),
         "POLARANG" => json!(st.polarang.to_degrees()),
         "GRIDMODE" => json!(i32::from(st.gridmode)),
         "SNAPMODE" => json!(i32::from(st.snapmode)),
@@ -297,6 +297,7 @@ pub fn set(s: &mut Session, name: &str, v: &Value) -> Result<()> {
         "SNAPTYPE" => st.polarsnap = as_i(v).filter(|b| (0..=1).contains(b)).ok_or_else(bad)? == 1,
         "AUTOSNAP" => {
             let bits = as_i(v).filter(|b| (0..=63).contains(b)).ok_or_else(bad)?;
+            st.autosnap_magnet = bits & 2 != 0;
             st.polarmode = bits & 8 != 0;
             st.otrack = bits & 16 != 0;
         }

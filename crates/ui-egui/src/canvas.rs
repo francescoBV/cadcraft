@@ -23,7 +23,7 @@ mod pick;
 mod viewport;
 mod widgets;
 
-use cursor::{draw_crosshair, draw_snap_marker, draw_tracking, effective_point, override_cursor};
+use cursor::{draw_crosshair, draw_snap_marker, draw_tracking, effective_point, magnet_pos, override_cursor};
 use cycle::{CycleList, cycle_badge, cycle_click, cycle_list, over_canvas_menu, shift_space_cycle};
 pub(crate) use draw::{Look, draw_highlight, draw_list};
 use draw::{draw_drag_gpu, draw_highlight_gpu, draw_list_gpu, list_mesh_key, selection_area_fill};
@@ -904,7 +904,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             // Use the painted sheet even in MSPACE, where the editing transform follows a
             // model viewport. The whole cursor takes one colour from its centre.
             let ink = paper_rect.map_or(t.crosshair, |paper| crate::theme::crosshair_color(if paper.contains(hp) { t.paper } else { surround }));
-            draw_crosshair(app, &painter, rect, hp, selecting, ink);
+            draw_crosshair(app, &painter, rect, magnet_pos(app, &xf, hp), selecting, ink);
             if app.canvas.cycle_badge && app.canvas.cycle.is_none() {
                 cycle_badge(&painter, hp);
             }

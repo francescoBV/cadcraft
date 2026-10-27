@@ -118,6 +118,8 @@ pub struct Settings {
     /// POLARMODE bits ([`snap::tracking::polarmode`]); polar tracking itself is on while
     /// `polarmode` is (AUTOSNAP bit 8, F10).
     pub polar_flags: u32,
+    /// AUTOSNAP bit 2 (the AutoSnap magnet): the cursor locks onto the snap point it finds.
+    pub autosnap_magnet: bool,
     /// POLARADDANG: additional polar tracking angles (radians), used with POLARMODE bit 4.
     pub polaraddang: Vec<f64>,
     /// SNAPTYPE 1: snap mode (F9) snaps along tracking paths at POLARDIST steps (PolarSnap)
@@ -187,6 +189,7 @@ impl Default for Settings {
             crossingareacolor: 100,
             selectionareaopacity: 25,
             polar_flags: 0,
+            autosnap_magnet: true,
             polaraddang: Vec::new(),
             polarsnap: false,
             polardist: 0.0,

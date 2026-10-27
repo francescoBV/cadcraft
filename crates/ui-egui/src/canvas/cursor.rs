@@ -212,6 +212,18 @@ pub(super) fn override_cursor(app: &mut CadApp, raw: Vec2, xf: &Xf) {
     app.session.cursor_deferred = app.canvas.snap.and_then(|h| h.deferred);
 }
 
+/// Where the crosshair is drawn: on the object snap found when the AutoSnap magnet (AUTOSNAP
+/// bit 2) is on, as AutoCAD locks the cursor onto it; else at the pointer `hover`.
+pub(super) fn magnet_pos(app: &CadApp, xf: &Xf, hover: Pos2) -> Pos2 {
+    match app.canvas.snap {
+        Some(hit) if app.session.settings.autosnap_magnet && app.canvas.cursor.is_some() => {
+            let at = xf.to_screen(hit.point);
+            if at.is_finite() { at } else { hover }
+        }
+        _ => hover,
+    }
+}
+
 fn pickbox_half(pickbox: f64) -> Option<f32> {
     let half = (pickbox * 1.5) as f32;
     (half.is_finite() && half >= 1.0).then_some(half)

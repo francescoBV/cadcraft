@@ -343,12 +343,14 @@ fn sysvars_polarmode_polaraddang_autosnap() {
     assert_eq!(get(&s, "POLARMODE"), json!(6));
     setvar(&mut s, "POLARADDANG", json!("15;22.5"));
     assert_eq!(get(&s, "POLARADDANG"), json!("15;22.5"));
-    assert_eq!(get(&s, "AUTOSNAP"), json!(61));
+    assert_eq!(get(&s, "AUTOSNAP"), json!(63), "AutoCAD's default: marker, magnet, tooltips, polar and tracking");
     s.execute("otrack", &json!({})).unwrap();
     assert!(!s.settings.otrack, "F11 toggles tracking");
-    assert_eq!(get(&s, "AUTOSNAP"), json!(45));
+    assert_eq!(get(&s, "AUTOSNAP"), json!(47));
+    setvar(&mut s, "AUTOSNAP", json!(61));
+    assert!(s.settings.otrack && s.settings.polarmode && !s.settings.autosnap_magnet, "bit 2 is the magnet");
     setvar(&mut s, "AUTOSNAP", json!(63));
-    assert!(s.settings.otrack && s.settings.polarmode);
+    assert!(s.settings.otrack && s.settings.polarmode && s.settings.autosnap_magnet);
     for (n, bad) in [
         ("POLARMODE", json!(16)),
         ("POLARMODE", json!(-1)),
