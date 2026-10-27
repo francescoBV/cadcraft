@@ -42,6 +42,28 @@ pub struct RefEdit {
     /// Block objects taken out of the working set with their edits (block coordinates, the block
     /// object's handle).
     pub released: Vec<Entity>,
+    /// The nested references picked through to reach the edited block: block references inside
+    /// block definitions, outermost first. Empty when the picked reference's own block is edited.
+    pub path: Vec<Handle>,
+    /// Set when the edited block comes from an external reference: REFCLOSE Save writes it back
+    /// into its source drawing.
+    pub xref: Option<XrefSource>,
+}
+
+/// Where an xref edited in place is written back to.
+#[derive(Clone, Debug, PartialEq)]
+pub struct XrefSource {
+    /// The xref (its block name in this drawing).
+    pub xref: String,
+    /// The source drawing file.
+    pub file: String,
+    /// The block of the source drawing being edited; `None` for its model space.
+    pub block: Option<String>,
+    /// The file's size and modification time (nanoseconds since 1970) when the edit began.
+    pub stamp: Option<(u64, u128)>,
+    /// Edited block objects (their handles in this drawing) and the objects of the source
+    /// drawing they were loaded from.
+    pub sources: Vec<(Handle, Handle)>,
 }
 
 impl RefEdit {

@@ -66,6 +66,15 @@ fn entity_parts(b: &mut Builder, ctx: &Ctx, e: &Entity) {
     if b.opts.transparency {
         b.transparency = transparency(e.common.transparency, layer_transparency, ctx.block_transparency);
     }
+    // While a reference is edited in place (REFEDIT) everything outside the working set is
+    // faded by XFADECTL percent on screen.
+    if !b.plotting
+        && let Some(r) = &ctx.d.refedit
+        && !r.is_working(if ctx.depth == 0 { e.handle } else { ctx.top })
+    {
+        let fade = u8::try_from(ctx.d.header.i64("XFADECTL", 50).clamp(0, 90)).unwrap_or(50);
+        b.transparency = b.transparency.max(fade);
+    }
     // A plot style's linetype replaces the object's.
     let lt = match b.styles.and_then(|s| s.linetype(rgb, b.named)) {
         Some(over) => over,

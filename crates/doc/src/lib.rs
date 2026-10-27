@@ -31,7 +31,7 @@ pub use gdt::*;
 pub use header::{HVal, Header};
 pub use plotstyle::*;
 pub use plotter::*;
-pub use refedit::{RefEdit, WorkItem};
+pub use refedit::{RefEdit, WorkItem, XrefSource};
 pub use store::EntityStore;
 pub use tables::*;
 

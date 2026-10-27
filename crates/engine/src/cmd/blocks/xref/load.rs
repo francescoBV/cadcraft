@@ -133,7 +133,7 @@ struct Ctx {
 }
 
 /// The folder of the host drawing at `host` (a file path).
-fn folder(host: Option<&Path>) -> Option<PathBuf> {
+pub(crate) fn folder(host: Option<&Path>) -> Option<PathBuf> {
     let p = host?.parent()?;
     Some(if p.as_os_str().is_empty() { PathBuf::from(".") } else { p.to_path_buf() })
 }
@@ -244,6 +244,10 @@ fn read(file: &Path, cx: &mut Ctx) -> Result<Drawing, String> {
             return Err(too_big());
         }
         cx.bytes = cx.bytes.saturating_add(n);
+        // Remembered so an edit in place can tell whether the file changed since (REFEDIT).
+        if let Some(st) = stamp(file) {
+            remember(file, st);
+        }
         (hooks.read)(&bytes, &file.to_string_lossy())
     }
     #[cfg(target_arch = "wasm32")]
@@ -251,6 +255,50 @@ fn read(file: &Path, cx: &mut Ctx) -> Result<Drawing, String> {
         let _ = (hooks, file, cx);
         Err("files are not available on the web".into())
     }
+}
+
+/// Size and modification time (nanoseconds since 1970) of each referenced file when it was last
+/// read, by canonical path.
+#[cfg(not(target_arch = "wasm32"))]
+static LOADED: std::sync::Mutex<std::collections::BTreeMap<PathBuf, (u64, u128)>> = std::sync::Mutex::new(std::collections::BTreeMap::new());
+/// Most files [`LOADED`] remembers.
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_REMEMBERED: usize = 10_000;
+
+/// The size and modification time of `file` (nanoseconds since 1970).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn stamp(file: &Path) -> Option<(u64, u128)> {
+    let m = std::fs::metadata(file).ok()?;
+    let t = m.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
+    Some((m.len(), t))
+}
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn stamp(_file: &Path) -> Option<(u64, u128)> {
+    None
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn remember(file: &Path, st: (u64, u128)) {
+    let mut m = LOADED.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if m.len() >= MAX_REMEMBERED {
+        m.clear();
+    }
+    m.insert(canonical(file), st);
+}
+
+/// The size and modification time `file` had when it was last loaded as an xref.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn loaded_stamp(file: &Path) -> Option<(u64, u128)> {
+    LOADED.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(&canonical(file)).copied()
+}
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn loaded_stamp(_file: &Path) -> Option<(u64, u128)> {
+    None
+}
+
+/// Read the drawing file `file` (with the size limits of xref loading).
+pub(crate) fn read_file(file: &Path) -> Result<Drawing, String> {
+    read(file, &mut Ctx::new(None))
 }
 
 /// Load every xref of `d` that isn't unloaded from the paths saved in it; `host` is the drawing's
