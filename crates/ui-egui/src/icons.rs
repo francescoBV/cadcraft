@@ -115,6 +115,7 @@ pub enum Icon {
     Isodraft,
     DynInput,
     QuickProps,
+    Isolate,
     Gear,
     Annotation,
     Workspace,
@@ -900,6 +901,12 @@ pub fn paint(p: &Painter, rect: Rect, icon: Icon, dim: bool) {
                 pen.la(11.0, y, 16.0, y);
             }
             pen.poly(&[(15.0, 14.0), (15.0, 22.0), (17.0, 20.0), (19.5, 22.5), (20.5, 21.5), (18.0, 19.0), (21.0, 18.5)], true, b);
+        }
+        Isolate => {
+            // A light bulb: objects shown or hidden.
+            pen.c(12.0, 10.0, 6.0, b);
+            pen.poly(&[(9.5, 15.5), (9.5, 19.0), (14.5, 19.0), (14.5, 15.5)], false, b);
+            pen.la(10.0, 21.0, 14.0, 21.0);
         }
         Equal => {
             pen.l(5.0, 9.0, 19.0, 9.0);

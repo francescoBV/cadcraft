@@ -1,9 +1,12 @@
 //! Selection tools: SELECTSIMILAR (objects like the selected ones, per SELECTSIMILARMODE) and
 //! object isolation — ISOLATEOBJECTS, HIDEOBJECTS, UNISOLATEOBJECTS.
 //!
-//! Isolation is temporary (OBJECTISOLATIONMODE 0): hidden objects are kept in
+//! With OBJECTISOLATIONMODE 0 isolation is temporary: hidden objects are kept in
 //! [`Drawing::hidden_objects`], which display, selection, snapping and plotting skip and which
-//! is never written to a file. Hiding and showing are undoable like any other change.
+//! is never written to a file. With OBJECTISOLATIONMODE 1 it is saved with the drawing: hidden
+//! objects are made invisible (DXF group 60), so they stay hidden when the drawing is reopened,
+//! in CADCraft or any other program, until UNISOLATEOBJECTS shows them. Hiding and showing are
+//! undoable like any other change.
 
 use cadcraft_doc::{Drawing, Entity, EntityKind, Handle};
 use serde_json::{Value, json};
@@ -28,15 +31,15 @@ pub fn specs() -> Vec<CommandSpec> {
             .interactive(|_| Ok(Box::new(SelectSimilarM::default()))),
         CommandSpec::new("isolateobjects", "Isolate Objects", run_isolate)
             .menu(&["Tools", "Isolate", "Isolate Objects"])
-            .params("{handles? (default the selection)} → hides every other object of the current space for this session: {hidden}")
+            .params("{handles? (default the selection)} → hides every other object of the current space (for this session, or saved with the drawing under OBJECTISOLATIONMODE 1): {hidden}")
             .interactive(|_| Ok(Box::new(SelectRun::new("isolateobjects", "ISOLATEOBJECTS")))),
         CommandSpec::new("hideobjects", "Hide Objects", run_hide)
             .menu(&["Tools", "Isolate", "Hide Objects"])
-            .params("{handles? (default the selection)} → hides these objects for this session: {hidden}")
+            .params("{handles? (default the selection)} → hides these objects (for this session, or saved with the drawing under OBJECTISOLATIONMODE 1): {hidden}")
             .interactive(|_| Ok(Box::new(SelectRun::new("hideobjects", "HIDEOBJECTS")))),
         CommandSpec::new("unisolateobjects", "End Object Isolation", run_unisolate)
             .menu(&["Tools", "Isolate", "End Object Isolation"])
-            .params("{} → shows every object ISOLATEOBJECTS or HIDEOBJECTS hid: {shown}"),
+            .params("{} → shows every object ISOLATEOBJECTS or HIDEOBJECTS hid, and every invisible object a saved isolation left: {shown}"),
     ]
 }
 
@@ -202,9 +205,17 @@ impl Interactive for SelectSimilarM {
 /// Hide `hs` (objects that exist and aren't hidden yet); returns how many were hidden.
 fn hide(s: &mut Session, hs: Vec<Handle>) -> Result<usize> {
     let d = s.doc()?;
-    let hs: Vec<Handle> = hs.into_iter().filter(|h| d.entity(*h).is_some() && !d.is_hidden_object(*h)).collect();
+    let hs: Vec<Handle> = hs.into_iter().filter(|h| d.entity(*h).is_some_and(|e| e.common.visible) && !d.is_hidden_object(*h)).collect();
     if !hs.is_empty() {
-        s.doc_mut()?.hidden_objects.extend(hs.iter().copied());
+        if s.settings.objectisolationmode {
+            // Saved with the drawing: the objects themselves become invisible.
+            let d = s.doc_mut()?;
+            for h in &hs {
+                d.modify_entity(*h, |e| e.common.visible = false)?;
+            }
+        } else {
+            s.doc_mut()?.hidden_objects.extend(hs.iter().copied());
+        }
     }
     // Hidden objects can't stay selected.
     s.set_selection(Vec::new());
@@ -242,12 +253,35 @@ fn run_hide(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({ "hidden": n, "message": hidden_message(n) }))
 }
 
+/// The objects of the model and every layout written invisible (by an isolation saved with the
+/// drawing, OBJECTISOLATIONMODE 1, here or in another program).
+fn invisible_objects(d: &Drawing) -> Vec<Handle> {
+    std::iter::once(&d.model)
+        .chain(d.layouts.iter().map(|l| &l.entities))
+        .flat_map(|st| st.iter().take(MAX_SCAN))
+        .filter(|e| !e.common.visible)
+        .map(|e| e.handle)
+        .collect()
+}
+
+/// Whether any object is hidden by ISOLATEOBJECTS or HIDEOBJECTS, for this session or saved with
+/// the drawing (the status bar's isolation state).
+pub fn objects_isolated(d: &Drawing) -> bool {
+    !d.hidden_objects.is_empty()
+        || std::iter::once(&d.model).chain(d.layouts.iter().map(|l| &l.entities)).any(|st| st.iter().take(MAX_SCAN).any(|e| !e.common.visible))
+}
+
 fn run_unisolate(s: &mut Session, _p: &Value) -> Result<Value> {
-    let n = s.doc()?.hidden_objects.len();
+    let invisible = invisible_objects(s.doc()?);
+    let n = s.doc()?.hidden_objects.len() + invisible.len();
     if n == 0 {
         return Ok(json!({ "shown": 0, "message": "No objects are isolated or hidden." }));
     }
-    s.doc_mut()?.hidden_objects.clear();
+    let d = s.doc_mut()?;
+    d.hidden_objects.clear();
+    for h in invisible {
+        d.modify_entity(h, |e| e.common.visible = true)?;
+    }
     let msg = if n == 1 { "1 object shown".to_string() } else { format!("{n} objects shown") };
     Ok(json!({ "shown": n, "message": msg }))
 }

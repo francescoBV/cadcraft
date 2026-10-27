@@ -1373,3 +1373,6 @@
 	Check for Updates…	Перевірити оновлення…
 	CADCraft is up to date.	Встановлено найновішу версію CADCraft.
 	Could not check for updates.	Не вдалося перевірити оновлення.
+	Objects are isolated or hidden	Об'єкти ізольовано або приховано
+	Keep isolated objects hidden when the drawing is saved	Зберігати ізольовані об'єкти прихованими в збереженому кресленні
+	Objects hidden by Isolate Objects and Hide Objects stay hidden when the drawing is opened again.	Об'єкти, приховані командами «Ізолювати об'єкти» та «Приховати об'єкти», лишаються прихованими, коли креслення відкрито знову.

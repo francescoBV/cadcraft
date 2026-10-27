@@ -1367,3 +1367,6 @@ menu	Modify	Edita
 	Check for Updates…	Verifica aggiornamenti…
 	CADCraft is up to date.	CADCraft è aggiornato.
 	Could not check for updates.	Impossibile verificare gli aggiornamenti.
+	Objects are isolated or hidden	Oggetti isolati o nascosti
+	Keep isolated objects hidden when the drawing is saved	Mantieni nascosti gli oggetti isolati nel disegno salvato
+	Objects hidden by Isolate Objects and Hide Objects stay hidden when the drawing is opened again.	Gli oggetti nascosti con Isola oggetti e Nascondi oggetti restano nascosti quando il disegno viene riaperto.

@@ -325,6 +325,7 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
         // Right side: toggles, right-aligned.
         let s = app.session.settings.clone();
         let anno_all = app.session.doc().is_ok_and(|d| d.anno_all_visible());
+        let isolated = isolated(app);
         use cadcraft_engine::snap::mode;
         let toggles: Vec<(Icon, bool, &str, &str)> = vec![
             (Icon::Grid, s.gridmode, "grid", "Grid (F7)"),
@@ -338,6 +339,9 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             (Icon::Transparency, s.transparency_display, "transparencydisplay", "Show/Hide Transparency"),
             (Icon::DynInput, s.dynmode, "dynmode", "Dynamic Input (F12)"),
             (Icon::QuickProps, s.qpmode, "qpmode", "Quick Properties"),
+            // Lit while objects are isolated or hidden (for the session or saved with the
+            // drawing); a click opens the Isolate menu.
+            (Icon::Isolate, isolated, "isolate", if isolated { "Objects are isolated or hidden" } else { "Isolate Objects" }),
             (Icon::Annotation, anno_all, "annovisible.toggle", "Annotation Visibility"),
             (Icon::Workspace, false, "ui.noop", "Workspace Switching"),
             (Icon::Gear, false, "ui.dialog.dsettings", "Drafting Settings"),
@@ -487,6 +491,7 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             }
         }
         let mut toggle_cmd = None;
+        let mut isolate_cmd = None;
         for (icon, on, cmd, tip) in toggles {
             let br = Rect::from_min_size(pos2(rx, r.center().y - size / 2.0), vec2(size, size));
             let resp = ui.interact(br, ui.scope_id().with(("tg", tip)), Sense::click());
@@ -501,7 +506,22 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
                 p.hline(br.x_range().shrink(4.0), br.bottom() - 1.0, Stroke::new(1.5, t.toggle_on));
             }
             icons::describe_control(ui, &resp, tip, Some(on), false);
-            if resp.on_hover_text(crate::i18n::t(tip)).clicked() {
+            let resp = resp.on_hover_text(crate::i18n::t(tip));
+            if cmd == "isolate" {
+                let selected = !app.session.selection().is_empty();
+                egui::Popup::menu(&resp).show(|ui| {
+                    for (id, label, enabled) in [
+                        ("isolateobjects", "Isolate Objects", selected),
+                        ("hideobjects", "Hide Objects", selected),
+                        ("unisolateobjects", "End Object Isolation", on),
+                    ] {
+                        if ui.add_enabled(enabled, egui::Button::new(crate::i18n::t(label))).clicked() {
+                            isolate_cmd = Some(id);
+                            ui.close();
+                        }
+                    }
+                });
+            } else if resp.clicked() {
                 toggle_cmd = Some(cmd);
             }
             rx += size + 4.0;
@@ -512,7 +532,25 @@ pub fn status_bar(app: &mut CadApp, ui: &mut egui::Ui) {
             Some(c) => crate::menus::run_transparent(app, c),
             None => {}
         }
+        // Isolate and Hide use the selection; End Object Isolation runs at once.
+        if let Some(c) = isolate_cmd {
+            app.start(c);
+        }
     });
+}
+
+/// Whether objects are isolated or hidden in the current drawing, worked out once per change.
+fn isolated(app: &mut CadApp) -> bool {
+    let Ok(st) = app.session.state() else { return false };
+    let key = (st.uid, st.revision);
+    if let Some((k, v)) = app.canvas.isolated
+        && k == key
+    {
+        return v;
+    }
+    let v = cadcraft_engine::cmd::objects_isolated(&st.doc);
+    app.canvas.isolated = Some((key, v));
+    v
 }
 
 /// The Start page (no drawing open, or the Start tab).

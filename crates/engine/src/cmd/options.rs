@@ -51,6 +51,7 @@ pub const PROFILE_VARS: &[&str] = &[
     "PICKFIRST",
     "PICKADD",
     "PICKDRAG",
+    "OBJECTISOLATIONMODE",
     "MAXARRAY",
     "MEASUREINIT",
 ];
@@ -144,6 +145,7 @@ pub fn reset(s: &mut Session) {
     st.pickfirst = d.pickfirst;
     st.pickadd = d.pickadd;
     st.pickdrag = d.pickdrag;
+    st.objectisolationmode = d.objectisolationmode;
     st.maxarray = d.maxarray;
 }
 

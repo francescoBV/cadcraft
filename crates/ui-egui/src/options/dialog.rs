@@ -385,6 +385,14 @@ fn selection(app: &CadApp, ui: &mut egui::Ui, changes: &mut Map<String, Value>) 
         if left.checkbox(&mut qp, crate::tl!("Show Quick Properties for selected objects")).changed() {
             changes.insert("QPMODE".into(), json!(i32::from(qp)));
         }
+        let mut keep_hidden = st.objectisolationmode;
+        if left
+            .checkbox(&mut keep_hidden, crate::tl!("Keep isolated objects hidden when the drawing is saved"))
+            .on_hover_text(crate::tl!("Objects hidden by Isolate Objects and Hide Objects stay hidden when the drawing is opened again."))
+            .changed()
+        {
+            changes.insert("OBJECTISOLATIONMODE".into(), json!(i32::from(keep_hidden)));
+        }
         left.add_space(4.0);
         let selection_caption = left.label(crate::tl!("Selection effect color"));
         color_row(

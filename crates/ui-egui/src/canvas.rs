@@ -152,6 +152,9 @@ pub struct CanvasState {
     /// The right-click that opened the shortcut menu held Shift or Ctrl: it is the object snap
     /// menu ([`crate::context_menu`]).
     pub snap_menu: bool,
+    /// Whether objects are isolated, for the drawing (uid) and revision it was worked out for
+    /// (the status bar's isolation item).
+    pub(crate) isolated: Option<((u64, u64), bool)>,
     /// Tab was pressed over a snap marker: show the next candidate ([`SnapCycle`]).
     pub snap_tab: bool,
     pub snap_cycle: Option<SnapCycle>,
