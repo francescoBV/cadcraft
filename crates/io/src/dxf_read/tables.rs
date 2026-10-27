@@ -285,6 +285,7 @@ pub(super) fn tables(tags: &[Tag], d: &mut Drawing, rx: &mut Rx) {
                     }
                 }
                 fields.extend(crate::dxf_ext::read_newer_dimvars(&tg, &rx.styles, &rx.brs, &rx.ltypes));
+                fields.extend(crate::dxf_ext::read_dim_style_xdata(&tg));
                 let mut st = DimStyle { name: name.clone(), annotative: annotative(&tg), ..DimStyle::default() };
                 st.apply_fields(&fields);
                 match d.dim_styles.iter_mut().find(|s| s.name.eq_ignore_ascii_case(&name)) {

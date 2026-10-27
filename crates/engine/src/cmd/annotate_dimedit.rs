@@ -38,7 +38,7 @@ pub(super) fn specs() -> Vec<CommandSpec> {
             .interactive(|_| Ok(Box::new(JogLineM::default()))),
         CommandSpec::new("dimbreak", "Dimension Break", run_dimbreak)
             .menu(&["Dimension", "Dimension Break"])
-            .params("{handles?, mode?: auto|manual|remove (default auto), objects?: [hex] (auto: the objects that break; default all crossing objects), first?/second?: [x,y] (manual), size?: number (default 0.125 × DIMSCALE)}")
+            .params("{handles?, mode?: auto|manual|remove (default auto), objects?: [hex] (auto: the objects that break; default all crossing objects), first?/second?: [x,y] (manual), size?: number (default: the style's break size × DIMSCALE)}")
             .interactive(|_| Ok(Box::new(DimBreakM::default()))),
         CommandSpec::new("diminspect", "Inspection", run_diminspect)
             .menu(&["Dimension", "Inspection"])
@@ -489,6 +489,14 @@ fn crossings(dm_lines: &[Vec<Vec2>], prims: &[Prim]) -> Vec<Vec2> {
     out
 }
 
+/// The break size DIMBREAK Auto uses for dimension `dm`: its style's (with its overrides) break
+/// size times the overall scale.
+fn default_break_size(d: &cadcraft_doc::Drawing, dm: &Dimension) -> f64 {
+    let st = d.dim_style(&dm.style).cloned().unwrap_or_default().with_overrides(&dm.overrides);
+    let size = st.break_size * st.effective_scale(d.header.f64("DIMSCALE", 1.0));
+    if size.is_finite() && size > 0.0 && size < 1e12 { size } else { 0.125 }
+}
+
 fn run_dimbreak(s: &mut Session, p: &Value) -> Result<Value> {
     let hs = dims_of(s, &targets(s, p)?);
     if hs.is_empty() {
@@ -496,10 +504,7 @@ fn run_dimbreak(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let mode = str_param(p, "mode").unwrap_or("auto").to_ascii_lowercase();
     let d = s.doc()?;
-    let size = match size_param("dimbreak", p, "size", false)? {
-        Some(x) => x,
-        None => 0.125 * Some(d.header.f64("DIMSCALE", 1.0)).filter(|k| *k > 0.0 && *k < 1e12).unwrap_or(1.0),
-    };
+    let size = size_param("dimbreak", p, "size", false)?;
     match mode.as_str() {
         "remove" => {
             let n = edit_dims(s, &hs, &|dm| {
@@ -541,14 +546,16 @@ fn run_dimbreak(s: &mut Session, p: &Value) -> Result<Value> {
             let mut plan = Vec::new();
             for h in &hs {
                 let Some(EntityKind::Dimension(dm)) = d.entity(*h).map(|e| &e.kind) else { continue };
+                // The style's break size (its break size × the overall scale) unless one is given.
+                let size = size.unwrap_or_else(|| default_break_size(d, dm));
                 let mut plain = dm.clone();
                 plain.marks.breaks.clear();
                 let g = cadcraft_render::dimension_in(d, &plain);
                 let prims: Vec<Prim> = others.iter().filter(|(o, _)| o != h).flat_map(|(_, p)| p.iter().cloned()).collect();
-                plan.push((*h, crossings(&g.lines, &prims)));
+                plan.push((*h, crossings(&g.lines, &prims), size));
             }
             let mut n = 0;
-            for (h, pts) in plan {
+            for (h, pts, size) in plan {
                 n += edit_dims(s, &[h], &|dm| {
                     dm.marks.breaks.retain(|b| !b.auto);
                     dm.marks.breaks.extend(pts.iter().map(|q| DimBreak { at: v3(*q), size, auto: true }));

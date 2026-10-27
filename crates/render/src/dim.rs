@@ -4,7 +4,8 @@
 //! fixed-length extension lines (DIMFXL/DIMFXLON), text placement (DIMTAD, DIMTVP, DIMJUST,
 //! DIMTIH/DIMTOH, DIMGAP, DIMTMOVE) and text formatting (DIMLUNIT, DIMDEC, DIMZIN, DIMRND,
 //! DIMPOST, DIMTOL/DIMLIM with DIMTZIN and DIMTOLJ, DIMALT with DIMALTU/DIMALTZ/DIMALTRND,
-//! DIMAZIN, DIMARCSYM) with its background (DIMTFILL).
+//! DIMALTTD/DIMALTTZ, DIMAZIN, DIMARCSYM, DIMTXTDIRECTION) with its background (DIMTFILL), and
+//! the jog height factor.
 
 use cadcraft_doc::{DimKind, DimStyle, Dimension};
 use cadcraft_fonts::{MTextParams, TextFont};
@@ -455,10 +456,12 @@ pub fn dimension_geometry_with(d: &Dimension, st: &DimStyle, dimscale: f64, font
                     g.dim(vec![base, text_mid + side * (tw / 2.0 + gap)]);
                 }
             }
-            // DIMJOGLINE: a zigzag in the dimension line, 1.5 text heights tall.
+            // DIMJOGLINE: a zigzag in the dimension line, the style's jog height factor (1.5 by
+            // default) times the text height tall.
             if let Some(j) = d.marks.jog_line {
                 let at = f1 + u * (j.xy() - f1).dot(u);
-                let h = 1.5 * th;
+                let factor = if st.jog_height.is_finite() && st.jog_height > 0.0 && st.jog_height <= 1e6 { st.jog_height } else { 1.5 };
+                let h = factor * th;
                 if at.is_finite() && h > 0.0 {
                     let r = h / 2.0;
                     g.cut(at, r, Some(LineRole::Dim));
@@ -740,6 +743,10 @@ pub fn dimension_geometry_with(d: &Dimension, st: &DimStyle, dimscale: f64, font
         g.text_fill = [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)].into_iter().map(|(px, py)| text_mid + x * px + y * py).collect();
     }
     g.value = decode_value(&cadcraft_fonts::plain_mtext(&g.mtext));
+    // DIMTXTDIRECTION 1: the text reads right to left (plain text; formatted text stays as it is).
+    if st.text_direction == 1 && !g.mtext.contains(['\\', '{', '}', '%']) {
+        g.mtext = g.mtext.chars().rev().collect();
+    }
     if !g.mtext.is_empty() {
         let l = cadcraft_fonts::layout_mtext_with(&g.mtext, &params(text_mid, text_angle));
         for p in l.pieces {

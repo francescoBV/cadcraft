@@ -278,6 +278,20 @@ pub struct DimStyle {
     pub fixed_ext_length: f64,
     /// DIMJOGANG: angle (degrees) of the jog's middle segment in jogged radius dimensions.
     pub jog_angle: f64,
+    /// DIMALTTD / DIMALTTZ: decimal places and zero suppression (DIMZIN bits) of tolerance values
+    /// in alternate units.
+    pub alt_tol_decimals: u8,
+    pub alt_tol_zero_suppression: u8,
+    /// DIMUPT: the dimension line location also places the text (Fit tab, "Place text manually").
+    pub user_positioned_text: bool,
+    /// DIMTXTDIRECTION, reading direction of the text: 0 left to right, 1 right to left.
+    pub text_direction: u8,
+    /// Height of the jog of jogged linear dimensions (DIMJOGLINE), as a factor of the text height
+    /// (AutoCAD's "Jog height factor"; `ACAD_DSTYLE_DIMJAG` xdata in DXF).
+    pub jog_height: f64,
+    /// Gap DIMBREAK cuts where objects cross the dimension (AutoCAD's "Break size";
+    /// `ACAD_DSTYLE_DIMBREAK` xdata in DXF), before the overall scale.
+    pub break_size: f64,
 }
 
 /// DIMSTYLE system variable names and the [`DimStyle`] fields they set.
@@ -351,7 +365,15 @@ pub const DIMVARS: &[(&str, &str)] = &[
     ("DIMFXLON", "fixedExt"),
     ("DIMFXL", "fixedExtLength"),
     ("DIMJOGANG", "jogAngle"),
+    ("DIMALTTD", "altTolDecimals"),
+    ("DIMALTTZ", "altTolZeroSuppression"),
+    ("DIMUPT", "userPositionedText"),
+    ("DIMTXTDIRECTION", "textDirection"),
 ];
+
+/// Style settings with no DIM* system variable (AutoCAD keeps them in the style's xdata): the
+/// field names [`DimStyle::field_name`] also takes.
+pub const DIM_STYLE_ONLY: &[&str] = &["jogHeight", "breakSize"];
 
 impl Default for DimStyle {
     fn default() -> Self {
@@ -427,6 +449,12 @@ impl Default for DimStyle {
             fixed_ext: false,
             fixed_ext_length: 1.0,
             jog_angle: 45.0,
+            alt_tol_decimals: 2,
+            alt_tol_zero_suppression: 0,
+            user_positioned_text: false,
+            text_direction: 0,
+            jog_height: 1.5,
+            break_size: 0.125,
         }
     }
 }
@@ -438,7 +466,7 @@ impl DimStyle {
             .iter()
             .find(|(var, field)| var.eq_ignore_ascii_case(name) || field.eq_ignore_ascii_case(name))
             .map(|(_, f)| *f)
-            .or_else(|| ["name", "annotative"].into_iter().find(|f| f.eq_ignore_ascii_case(name)))
+            .or_else(|| ["name", "annotative"].into_iter().chain(DIM_STYLE_ONLY.iter().copied()).find(|f| f.eq_ignore_ascii_case(name)))
     }
 
     /// The value `v` takes for a field whose current value is `old`: coerced to the field's type where
@@ -480,6 +508,9 @@ impl DimStyle {
             "textMove" | "tolJust" | "arcSymbol" | "textFill" => x.is_some_and(|x| x > 2.0),
             "dimLineweight" | "extLineweight" => x.is_some_and(|x| !(-3.0..=211.0).contains(&x)),
             "jogAngle" => x.is_some_and(|x| !(5.0..=90.0).contains(&x)),
+            "textDirection" => x.is_some_and(|x| x > 1.0),
+            "jogHeight" => x.is_some_and(|x| !(x > 0.0 && x <= 1e6)),
+            "breakSize" => x.is_some_and(|x| !(0.0..=1e12).contains(&x)),
             _ => false,
         }
     }
@@ -614,6 +645,7 @@ impl DimStyle {
             baseline_spacing: 3.75,
             force_line_inside: true,
             tol_just: 0,
+            break_size: 3.75,
             ..Default::default()
         }
     }

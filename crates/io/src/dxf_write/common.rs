@@ -43,6 +43,7 @@ pub(super) fn dim_xdata(w: &mut W, dm: &Dimension, cx: &Ctx) {
         ours.extend(dxf_ext::assoc_xdata(&dm.assoc));
     }
     ours.extend(dxf_ext::marks_xdata(&dm.marks));
+    ours.extend(dxf_ext::style_only_overrides_xdata(&dm.overrides));
     if !ours.is_empty() {
         w.s(1001, dxf_ext::APP);
         w.xdata(ours);

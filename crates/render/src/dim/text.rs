@@ -47,7 +47,20 @@ pub(super) fn linear_text(meas: f64, d: &Dimension, st: &DimStyle, prefix: &str)
         };
         let af = NumFormat { unit, decimals: st.alt_decimals, zin: st.alt_zero_suppression, round: st.alt_round, frac, ..nf };
         let alt = format_linear(v * st.alt_factor, &af).1;
-        s += &format!(" [{}]", post(&st.alt_post, &alt));
+        let mut alt = post(&st.alt_post, &alt);
+        // Tolerances in alternate units too (DIMALTTD decimals, DIMALTTZ zeros), never rounded.
+        if st.tolerance && !st.limits {
+            let tf = NumFormat { decimals: st.alt_tol_decimals, zin: st.alt_tol_zero_suppression, round: 0.0, ..af };
+            let (plus, minus) = (st.tol_plus * st.alt_factor, st.tol_minus * st.alt_factor);
+            if (st.tol_plus - st.tol_minus).abs() < 1e-12 {
+                alt += &format!("%%p{}", format_linear(plus, &tf).1);
+            } else {
+                let (p, m) = (format_linear(plus, &tf).1, format_linear(minus.abs(), &tf).1);
+                let m = if minus < 0.0 { format!("+{m}") } else { format!("-{m}") };
+                alt += &format!("{{\\H{};\\S+{p}^{m};}}", tol_height_code(st));
+            }
+        }
+        s += &format!(" [{alt}]");
     }
     inspected(apply_override(&s, d), d)
 }

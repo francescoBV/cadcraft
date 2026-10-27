@@ -460,7 +460,10 @@ pub(super) fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Ta
         w.f(146, 0.0);
     }
     w.s(0, "ENDTAB");
-    let apps = ["ACAD", dxf_ext::APP, "AcadAnnotative", dxf_ext::LAYER_TRANSPARENCY_APP, dxf_ext::LAYER_DESCRIPTION_APP];
+    let mut apps = vec!["ACAD", dxf_ext::APP, "AcadAnnotative", dxf_ext::LAYER_TRANSPARENCY_APP, dxf_ext::LAYER_DESCRIPTION_APP];
+    // The applications of the dimension style xdata the DIMSTYLE table below writes.
+    let style_apps: Vec<&str> = d.dim_styles.iter().flat_map(|s| dxf_ext::dim_style_xdata(s).into_iter().map(|(app, _)| app)).collect();
+    apps.extend(dxf_ext::STYLE_XDATA_APPS.into_iter().filter(|a| style_apps.contains(a)));
     let th = table_head(&mut w, "APPID", apps.len());
     for app in apps {
         record_head(&mut w, "APPID", &th, "AcDbRegAppTableRecord");
@@ -522,6 +525,10 @@ pub(super) fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Ta
         }
         if s.annotative {
             annotative_xdata(&mut w);
+        }
+        for (app, tags) in dxf_ext::dim_style_xdata(s) {
+            w.s(1001, app);
+            w.xdata(tags);
         }
         if !newer.t.is_empty() {
             w.s(1001, dxf_ext::APP);

@@ -140,6 +140,10 @@ pub(crate) const DIM_CODES: &[(&str, i32, K)] = &[
     ("extLinetype2", 347, K::Linetype),
     ("dimLineweight", 371, K::Int),
     ("extLineweight", 372, K::Int),
+    ("altTolDecimals", 274, K::Int),
+    ("altTolZeroSuppression", 286, K::Int),
+    ("userPositionedText", 288, K::Bool),
+    ("textDirection", 294, K::Int),
 ];
 
 /// DIMSAH: separate arrow blocks in use.
@@ -148,30 +152,100 @@ pub(crate) const DIMSAH: i32 = 173;
 pub(crate) const DIMPOST: i32 = 3;
 
 /// Variables newer than R2000: DIMFXL, DIMJOGANG, DIMTFILL, DIMTFILLCLR, DIMARCSYM, DIMFXLON,
-/// DIMLTYPE, DIMLTEX1, DIMLTEX2. Files of a variable's [`newer_since`] version or later get it as
-/// a DIMSTYLE group (R2004, and R2007 for DIMTFILL and DIMTFILLCLR); older files get it in a
-/// style's `CADCRAFT` "DIMVARS" xdata (`1070 <code>` then the value, like DSTYLE) instead of a
-/// group an older reader doesn't expect. The reader takes both.
-pub(crate) const NEWER_CODES: &[i32] = &[49, 50, 69, 70, 90, 290, 345, 346, 347];
-/// The first version with [`NEWER_CODES`] as DIMSTYLE groups, except DIMTFILL and DIMTFILLCLR
-/// (see [`newer_since`]): the others came with AutoCAD 2006, whose files are the 2004 format
-/// (AC1018).
+/// DIMLTYPE, DIMLTEX1, DIMLTEX2, DIMTXTDIRECTION. Files of a variable's [`newer_since`] version or
+/// later get it as a DIMSTYLE group (R2004, R2007 for DIMTFILL and DIMTFILLCLR, R2010 for
+/// DIMTXTDIRECTION); older files get it in a style's `CADCRAFT` "DIMVARS" xdata (`1070 <code>`
+/// then the value, like DSTYLE) instead of a group an older reader doesn't expect. The reader
+/// takes both.
+pub(crate) const NEWER_CODES: &[i32] = &[49, 50, 69, 70, 90, 290, 345, 346, 347, 294];
+/// The first version with [`NEWER_CODES`] as DIMSTYLE groups, except DIMTFILL, DIMTFILLCLR and
+/// DIMTXTDIRECTION (see [`newer_since`]): the others came with AutoCAD 2006, whose files are the
+/// 2004 format (AC1018).
 pub(crate) const NEWER_SINCE: Version = Version::R2004;
-
-/// The first version that has `code` (one of [`NEWER_CODES`]) as a DIMSTYLE group: R2007 for
-/// DIMTFILL and DIMTFILLCLR (Open Design Specification for .dwg files 5.4.1), else
-/// [`NEWER_SINCE`].
-pub(crate) fn newer_since(code: i32) -> Version {
-    if matches!(code, 69 | 70) { Version::R2007 } else { NEWER_SINCE }
-}
 /// Xdata list name of [`NEWER_CODES`] values.
 pub(crate) const DIMVARS_LIST: &str = "DIMVARS";
+
+/// The first version with a [`NEWER_CODES`] variable as a DIMSTYLE group: DIMTFILL and
+/// DIMTFILLCLR came with AutoCAD 2007 (AC1021; Open Design Specification for .dwg files 5.4.1),
+/// DIMTXTDIRECTION with 2010 (AC1024), the rest with [`NEWER_SINCE`].
+pub(crate) fn newer_since(code: i32) -> Version {
+    match code {
+        69 | 70 => Version::R2007,
+        294 => Version::R2010,
+        _ => NEWER_SINCE,
+    }
+}
+
+/// Style settings with no DIMSTYLE group, which AutoCAD keeps in a style's xdata (one
+/// registered application each: `1070 <code>`, then `1040` value): the jog height factor of
+/// jogged linear dimensions and the DIMBREAK size. [`dim_style_xdata`] writes them,
+/// [`read_dim_style_xdata`] reads them; per-dimension overrides of them travel in the
+/// dimension's `CADCRAFT` "DIMVARS" xdata ([`style_only_overrides_xdata`]).
+pub(crate) const STYLE_XDATA: &[(&str, &str, i32)] = &[("jogHeight", "ACAD_DSTYLE_DIMJAG", 388), ("breakSize", "ACAD_DSTYLE_DIMBREAK", 391)];
+
+/// The applications of [`STYLE_XDATA`], registered in the APPID table.
+pub(crate) const STYLE_XDATA_APPS: [&str; 2] = ["ACAD_DSTYLE_DIMJAG", "ACAD_DSTYLE_DIMBREAK"];
+
+/// A dimension style's [`STYLE_XDATA`] as (application, groups after its `1001`): the settings
+/// that differ from [`DimStyle::default`], which a style without them reads as.
+pub(crate) fn dim_style_xdata(st: &DimStyle) -> Vec<(&'static str, Vec<Tag>)> {
+    let v = serde_json::to_value(st).unwrap_or_default();
+    let default = serde_json::to_value(DimStyle::default()).unwrap_or_default();
+    STYLE_XDATA
+        .iter()
+        .filter_map(|(field, app, code)| {
+            let x = v.get(*field)?.as_f64().filter(|x| x.is_finite() && default.get(*field).and_then(Value::as_f64) != Some(*x))?;
+            Some((*app, vec![Tag::i(1070, i64::from(*code)), Tag::f(1040, x)]))
+        })
+        .collect()
+}
+
+/// The [`STYLE_XDATA`] settings of a DIMSTYLE record (unusable values are skipped).
+pub(crate) fn read_dim_style_xdata(tags: &[Tag]) -> serde_json::Map<String, Value> {
+    let mut out = serde_json::Map::new();
+    for (field, app, code) in STYLE_XDATA {
+        let x = xdata(tags, app);
+        let x = x.get(..x.len().min(16)).unwrap_or(&[]);
+        let at = x
+            .windows(2)
+            .find(|w| w.first().is_some_and(|t| t.code == 1070 && t.i64() == i64::from(*code)) && w.get(1).is_some_and(|t| t.code == 1040));
+        if let Some(val) = at.and_then(|w| w.get(1)).map(Tag::f64).filter(|x| x.is_finite()).and_then(|x| canonical(field, &serde_json::json!(x))) {
+            out.insert((*field).to_string(), val);
+        }
+    }
+    out
+}
+
+/// A dimension's overrides of [`STYLE_XDATA`] settings as `CADCRAFT` xdata (`1000 DIMVARS`,
+/// `1002 {`, `1070 <code>`, `1040` value…, `1002 }`): AutoCAD's DSTYLE has no codes for them.
+pub(crate) fn style_only_overrides_xdata(overrides: &serde_json::Map<String, Value>) -> Vec<Tag> {
+    let mut v = Vec::new();
+    for (field, _, code) in STYLE_XDATA {
+        let x =
+            overrides.iter().find(|(k, _)| DimStyle::field_name(k) == Some(*field)).and_then(|(_, x)| canonical(field, x)).and_then(|x| x.as_f64());
+        if let Some(x) = x.filter(|x| x.is_finite()) {
+            v.extend([Tag::i(1070, i64::from(*code)), Tag::f(1040, x)]);
+        }
+    }
+    if v.is_empty() {
+        return v;
+    }
+    let mut out = vec![Tag::s(1000, DIMVARS_LIST), Tag::s(1002, "{")];
+    out.extend(v);
+    out.push(Tag::s(1002, "}"));
+    out
+}
 
 pub(crate) fn dim_code(field: &str) -> Option<(i32, K)> {
     DIM_CODES.iter().find(|(f, _, _)| *f == field).map(|(_, c, k)| (*c, *k))
 }
 pub(crate) fn dim_field(code: i32) -> Option<(&'static str, K)> {
     DIM_CODES.iter().find(|(_, c, _)| *c == code).map(|(f, _, k)| (*f, *k))
+}
+
+/// [`dim_field`], and the [`STYLE_XDATA`] codes (in `CADCRAFT` lists only).
+fn dim_field_or_style_only(code: i32) -> Option<(&'static str, K)> {
+    dim_field(code).or_else(|| STYLE_XDATA.iter().find(|(_, _, c)| *c == code).map(|(f, _, _)| (*f, K::Real)))
 }
 
 /// The canonical JSON of a dimension-variable value (as a serialised [`DimStyle`] holds it),
@@ -386,7 +460,14 @@ pub(crate) fn read_dstyle(
     blocks: &HashMap<String, String>,
     ltypes: &HashMap<String, String>,
 ) -> serde_json::Map<String, Value> {
-    read_dimvar_list(xdata_list(xdata(tags, "ACAD"), "DSTYLE"), styles, blocks, ltypes)
+    let mut out = read_dimvar_list(xdata_list(xdata(tags, "ACAD"), "DSTYLE"), styles, blocks, ltypes, false);
+    // The overrides AutoCAD's DSTYLE has no code for ([`style_only_overrides_xdata`]).
+    for (k, v) in read_dimvar_list(xdata_list(xdata(tags, APP), DIMVARS_LIST), styles, blocks, ltypes, true) {
+        if STYLE_XDATA.iter().any(|(f, _, _)| *f == k) {
+            out.insert(k, v);
+        }
+    }
+    out
 }
 
 /// A style's [`NEWER_CODES`] variables from its `CADCRAFT` "DIMVARS" xdata.
@@ -396,15 +477,16 @@ pub(crate) fn read_newer_dimvars(
     blocks: &HashMap<String, String>,
     ltypes: &HashMap<String, String>,
 ) -> serde_json::Map<String, Value> {
-    read_dimvar_list(xdata_list(xdata(tags, APP), DIMVARS_LIST), styles, blocks, ltypes)
+    read_dimvar_list(xdata_list(xdata(tags, APP), DIMVARS_LIST), styles, blocks, ltypes, false)
 }
 
-/// `1070 <code>` / value pairs of dimension variables.
+/// `1070 <code>` / value pairs of dimension variables (`style_only`: the [`STYLE_XDATA`] codes too).
 fn read_dimvar_list(
     list: &[Tag],
     styles: &HashMap<String, String>,
     blocks: &HashMap<String, String>,
     ltypes: &HashMap<String, String>,
+    style_only: bool,
 ) -> serde_json::Map<String, Value> {
     let mut out = serde_json::Map::new();
     let mut it = list.iter().take(MAX_XDATA_ITEMS * 2);
@@ -414,7 +496,8 @@ fn read_dimvar_list(
         }
         let code = t.i64();
         let Some(v) = it.next() else { break };
-        let Some((field, kind)) = i32::try_from(code).ok().and_then(dim_field) else { continue };
+        let lookup = if style_only { dim_field_or_style_only } else { dim_field };
+        let Some((field, kind)) = i32::try_from(code).ok().and_then(lookup) else { continue };
         if let Some(val) = decode(kind, v, styles, blocks, ltypes).and_then(|j| canonical(field, &j)) {
             out.insert(field.to_string(), val);
         }
