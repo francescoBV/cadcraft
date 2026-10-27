@@ -111,18 +111,16 @@ impl CadApp {
     /// Every frame: autosave what is due, and wake up when the next one is.
     pub fn autosave_tick(&mut self, ctx: &egui::Context) {
         let Some(saver) = self.autosave.as_mut() else { return };
-        if saver.uses_store() {
+        let wait = if saver.uses_store() {
             let tick = saver.tick_store(&self.session);
             if let Some(e) = tick.errors.last() {
                 self.set_status(e.clone());
             }
-            if let Some(wait) = tick.next_due {
-                ctx.request_repaint_after(std::time::Duration::from_secs_f64(wait));
-            }
-            return;
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(wait) = saver.tick(&self.session) {
+            tick.next_due.map(std::time::Duration::from_secs_f64)
+        } else {
+            tick_files(saver, &self.session)
+        };
+        if let Some(wait) = wait {
             ctx.request_repaint_after(wait);
         }
     }
@@ -145,6 +143,17 @@ impl CadApp {
             s.shutdown();
         }
     }
+}
+
+/// Autosave to files what is due (desktop); how long until the next autosave is due.
+#[cfg(not(target_arch = "wasm32"))]
+fn tick_files(saver: &mut autosave::Autosaver, session: &cadcraft_engine::Session) -> Option<std::time::Duration> {
+    saver.tick(session)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn tick_files(_: &mut autosave::Autosaver, _: &cadcraft_engine::Session) -> Option<std::time::Duration> {
+    None
 }
 
 /// Autosave every drawing with changes not yet autosaved at once; how many were written.
