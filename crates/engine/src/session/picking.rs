@@ -16,6 +16,44 @@ impl Session {
         true
     }
 
+    /// Whether a press-and-drag at this moment draws a lasso (LASSOMODE and PICKDRAG on, and no
+    /// command running or a command asking to select objects).
+    pub fn lasso_allowed(&self) -> bool {
+        self.settings.lassomode
+            && self.settings.pickdrag
+            && self.pending_window.is_none()
+            && self.select_mode.is_none()
+            && match self.running.as_ref() {
+                None => self.lisp_prompt().is_none(),
+                Some(r) => r.machine.prompt(self).accept.select,
+            }
+    }
+
+    /// A finished lasso through `pts` (world points, in drawing order): its objects go to the
+    /// command asking to select, or into the selection with no command running (with
+    /// [`Self::idle_click`]'s PICKADD and Shift rules).
+    pub fn lasso(&mut self, pts: &[Vec2], kind: select::LassoKind, shift: bool) -> Result<()> {
+        self.pending_window = None;
+        if !self.lasso_allowed() {
+            return Ok(());
+        }
+        let space = self.space();
+        let hs = select::select_lasso(self.doc()?, &space, pts, kind);
+        let hs = cmd::groups::expand(self, hs);
+        if self.running.is_some() {
+            return self.input(Input::Pick(hs));
+        }
+        let pickadd = self.settings.pickadd;
+        let mut sel = if pickadd || shift { self.selection() } else { Vec::new() };
+        if shift && pickadd {
+            sel.retain(|h| !hs.contains(h));
+        } else {
+            sel.extend(hs.into_iter().filter(|h| !sel.contains(h)).collect::<Vec<_>>());
+        }
+        self.set_selection(sel);
+        Ok(())
+    }
+
     /// A click with no command running: pick/toggle objects or start a selection window.
     ///
     /// PICKADD on (the default): picks add to the selection and Shift removes. PICKADD off: each pick

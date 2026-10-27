@@ -378,6 +378,14 @@ fn selection(app: &CadApp, ui: &mut egui::Ui, changes: &mut Map<String, Value>) 
         {
             changes.insert("PICKDRAG".into(), json!(if two_clicks { 0 } else { 2 }));
         }
+        let mut lasso = st.lassomode;
+        if left
+            .add_enabled(!two_clicks, egui::Checkbox::new(&mut lasso, crate::tl!("Press and drag draws a lasso")))
+            .on_hover_text(crate::tl!("Dragging in an empty area draws a free-form selection loop instead of a rectangle."))
+            .changed()
+        {
+            changes.insert("LASSOMODE".into(), json!(i32::from(lasso)));
+        }
         if left.checkbox(&mut grouping, crate::tl!("Object grouping")).changed() {
             changes.insert("PICKSTYLE".into(), json!((st.pickstyle & !1) | u8::from(grouping)));
         }

@@ -1373,3 +1373,9 @@
 	Check for Updates…	Перевірити оновлення…
 	CADCraft is up to date.	Встановлено найновішу версію CADCraft.
 	Could not check for updates.	Не вдалося перевірити оновлення.
+	Window Lasso	Ласо-рамка
+	Crossing Lasso	Січне ласо
+	Fence Lasso	Ласо-лінія
+	Press Space to cycle options	Пробіл перемикає варіанти
+	Press and drag draws a lasso	Натискання й перетягування малює ласо
+	Dragging in an empty area draws a free-form selection loop instead of a rectangle.	Перетягування в порожній області малює довільну петлю вибору замість прямокутника.

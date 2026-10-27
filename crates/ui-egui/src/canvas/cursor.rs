@@ -149,7 +149,7 @@ pub(super) fn effective_point(app: &mut CadApp, raw: Vec2, xf: &Xf, ctx: &egui::
     r.point
 }
 
-fn tooltip(p: &egui::Painter, at: Pos2, text: &str) {
+pub(super) fn tooltip(p: &egui::Painter, at: Pos2, text: &str) {
     let galley = p.layout_no_wrap(text.to_string(), crate::theme::small(), Color32::from_rgb(0x20, 0x20, 0x20));
     let r = Rect::from_min_size(at, galley.size() + vec2(8.0, 4.0));
     p.rect_filled(r, 2.0, Color32::from_rgb(0xf4, 0xf4, 0xf4));

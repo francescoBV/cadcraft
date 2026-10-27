@@ -74,6 +74,9 @@ pub struct Settings {
     /// PICKDRAG: false = two-click windows (0), true = clicks or dragging (2).
     /// Drag-only mode (1) is not supported yet.
     pub pickdrag: bool,
+    /// LASSOMODE: pressing and dragging in an empty area draws a lasso (1, the default) instead
+    /// of a rectangular window (0). Needs PICKDRAG 2.
+    pub lassomode: bool,
     /// PICKSTYLE: bit 1 picks whole selectable groups ([`cmd::groups`]), bit 2 associative hatches
     /// with their boundaries (stored, not used yet).
     pub pickstyle: u8,
@@ -166,6 +169,7 @@ impl Default for Settings {
             filedia: true,
             pickadd: true,
             pickdrag: true,
+            lassomode: true,
             pickstyle: 1,
             gripsize: 5.0,
             cursorsize: 5.0,

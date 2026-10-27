@@ -368,6 +368,71 @@ pub fn select_polygon(d: &Drawing, space: &Space, poly: &[Vec2], crossing: bool)
     out
 }
 
+/// A lasso's selection: drawn left to right a window (objects inside it), right to left a
+/// crossing (inside or crossed); Space while dragging steps through window, crossing and fence
+/// (objects the lasso's path crosses).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LassoKind {
+    Window,
+    Crossing,
+    Fence,
+}
+
+impl LassoKind {
+    /// The lasso a drag makes from its first movement sideways: right a window, left a crossing.
+    /// `None` until the path has moved sideways from where it started.
+    pub fn by_direction(pts: &[Vec2]) -> Option<LassoKind> {
+        let first = pts.first()?;
+        let b = Bounds2::from_points(pts.iter().copied());
+        let min = (b.width().hypot(b.height()) * 1e-9).max(f64::MIN_POSITIVE);
+        let p = pts.iter().find(|p| (p.x - first.x).abs() > min)?;
+        Some(if p.x > first.x { LassoKind::Window } else { LassoKind::Crossing })
+    }
+    /// The next kind Space gives while dragging.
+    pub fn next(self) -> LassoKind {
+        match self {
+            LassoKind::Window => LassoKind::Crossing,
+            LassoKind::Crossing => LassoKind::Fence,
+            LassoKind::Fence => LassoKind::Window,
+        }
+    }
+    /// The prompt-line name, as AutoCAD shows it while lassoing.
+    pub fn label(self) -> &'static str {
+        match self {
+            LassoKind::Window => "Window Lasso",
+            LassoKind::Crossing => "Crossing Lasso",
+            LassoKind::Fence => "Fence Lasso",
+        }
+    }
+}
+
+/// Most points a lasso keeps (the UI adds one per few pixels dragged).
+pub const MAX_LASSO_POINTS: usize = 4096;
+
+/// The objects a lasso through `pts` selects (a window or crossing lasso closes back to its
+/// first point). A window or crossing lasso that encloses almost nothing (a quick straight drag)
+/// selects as the rectangle from its first to its last point instead, left to right a window,
+/// right to left a crossing, as a press-and-drag without the lasso does. Non-finite points are
+/// dropped and the path is capped at [`MAX_LASSO_POINTS`].
+pub fn select_lasso(d: &Drawing, space: &Space, pts: &[Vec2], kind: LassoKind) -> Vec<Handle> {
+    let mut path: Vec<Vec2> = pts.iter().copied().filter(|p| p.is_finite()).take(MAX_LASSO_POINTS).collect();
+    path.dedup_by(|a, b| a == b);
+    if kind != LassoKind::Fence
+        && let (Some(&a), Some(&b)) = (path.first(), path.last())
+    {
+        let bx = Bounds2::from_points(path.iter().copied());
+        let enclosed = cadcraft_geom::shoelace(&path).abs();
+        if enclosed <= 0.05 * bx.width() * bx.height() && a != b {
+            return select_window(d, space, Bounds2::new(a, b), b.x < a.x);
+        }
+    }
+    match kind {
+        LassoKind::Fence if path.len() >= 2 => select_fence(d, space, &path),
+        LassoKind::Window | LassoKind::Crossing if path.len() >= 3 => select_polygon(d, space, &path, kind == LassoKind::Crossing),
+        _ => Vec::new(),
+    }
+}
+
 /// The visible objects in `space` of the group called `name` (any case), or `None` when the
 /// drawing has no such group.
 pub fn select_group(d: &Drawing, space: &Space, name: &str) -> Option<Vec<Handle>> {

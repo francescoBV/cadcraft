@@ -58,6 +58,7 @@ mod insert_prompts;
 mod isometric;
 mod join_close;
 mod json_param_validation;
+mod lasso;
 mod layer_cmdline;
 mod layer_merge_delete;
 mod layoff_repeat;

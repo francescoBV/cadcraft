@@ -1367,3 +1367,9 @@ menu	Modify	Edita
 	Check for Updates…	Verifica aggiornamenti…
 	CADCraft is up to date.	CADCraft è aggiornato.
 	Could not check for updates.	Impossibile verificare gli aggiornamenti.
+	Window Lasso	Lazo finestra
+	Crossing Lasso	Lazo intersezione
+	Fence Lasso	Lazo intercetta
+	Press Space to cycle options	Premere Spazio per scorrere le opzioni
+	Press and drag draws a lasso	Premere e trascinare disegna un lazo
+	Dragging in an empty area draws a free-form selection loop instead of a rectangle.	Il trascinamento in un'area vuota disegna un contorno di selezione a mano libera invece di un rettangolo.

@@ -149,6 +149,8 @@ pub struct CanvasState {
     pub param: crate::parametric::Cache,
     /// A selection window opened by a press-and-drag, to close where the button is let go.
     drag_window: bool,
+    /// A lasso being dragged (LASSOMODE 1), selecting where the button is let go.
+    pub(crate) lasso: Option<lasso::Lasso>,
     /// The right-click that opened the shortcut menu held Shift or Ctrl: it is the object snap
     /// menu ([`crate::context_menu`]).
     pub snap_menu: bool,
@@ -425,6 +427,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     // and eframe hands a slow frame's clicks over together, which egui reports as one.
     let point_prompt = app.session.current_prompt().is_some_and(|p| cadcraft_engine::pointmod::accepts(&p))
         && app.session.pending_window.is_none()
+        && app.canvas.lasso.is_none()
         && !app.session.realtime_zoom_active();
     let pressed_primary = pressed_primary || (point_prompt && resp.drag_stopped_by(egui::PointerButton::Primary));
     if point_prompt && inside && pressed_primary && !middle_down && app.cmd.options.is_none() && app.cmd.buffer.is_empty() {
@@ -564,6 +567,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
     // and letting go closes it. Drags on grips and drags while drawing are left alone.
     if !app.session.settings.pickdrag {
         app.canvas.drag_window = false;
+        app.canvas.lasso = None;
     }
     if app.session.settings.pickdrag
         && resp.drag_started_by(egui::PointerButton::Primary)
@@ -575,7 +579,35 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         && grip_at(app, &xf, Some(origin)).is_none()
         && crate::dyngrips::at(app, &xf, Some(origin)).is_none()
     {
-        app.canvas.drag_window = app.session.begin_window(xf.to_world(origin));
+        // LASSOMODE 1: a free-form lasso instead of the rectangle.
+        if app.session.lasso_allowed() {
+            app.canvas.lasso = Some(lasso::Lasso::new(origin, xf.to_world(origin)));
+        } else {
+            app.canvas.drag_window = app.session.begin_window(xf.to_world(origin));
+        }
+    }
+    // The lasso follows the pointer (every position the frame saw); letting go selects with it.
+    if let Some(l) = app.canvas.lasso.as_mut() {
+        let moves: Vec<Pos2> = ui.input(|i| {
+            i.events
+                .iter()
+                .filter_map(|e| match e {
+                    egui::Event::PointerMoved(p) => Some(*p),
+                    _ => None,
+                })
+                .chain(i.pointer.interact_pos())
+                .collect()
+        });
+        for at in moves {
+            l.extend(at, xf.to_world(at));
+        }
+    }
+    let lasso_done = resp.drag_stopped_by(egui::PointerButton::Primary) || !ui.input(|i| i.pointer.primary_down());
+    if lasso_done
+        && let Some(l) = app.canvas.lasso.take()
+        && let Err(e) = app.session.lasso(&l.pts, l.kind(), mods.shift)
+    {
+        app.session.echo(e.to_string());
     }
     if app.canvas.drag_window && resp.drag_stopped_by(egui::PointerButton::Primary) {
         app.canvas.drag_window = false;
@@ -635,6 +667,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         app.canvas.hover = hover_pos.and_then(|hp| c.row_at(hp));
         app.canvas.hover_at = None;
     }
+    lasso::space(app, ui);
     shift_space_cycle(app, ui, hover_pos.filter(|_| inside), raw_world);
     if inside && hover_pos != app.canvas.cycle_badge_at {
         app.canvas.cycle_badge = raw_world.is_some_and(|w| app.session.cycling_badge(w));
@@ -873,6 +906,7 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
             painter.rect_stroke(r, 0.0, st, egui::StrokeKind::Middle);
         }
     }
+    lasso::draw(app, &painter, &xf, hover_pos);
     // Acquired tracking points and the polar / tracking paths under the cursor.
     if app.canvas.cursor.is_some() {
         draw_tracking(&painter, &xf, &app.session.tracking.acquired, app.canvas.track.as_ref(), view.height * 4.0);
@@ -936,6 +970,8 @@ pub(crate) mod tests;
 mod blockedit;
 /// The COMPARE overlay.
 mod compare;
+/// Lasso selection (LASSOMODE).
+mod lasso;
 
 /// Background rebuilds of the display list for a new view.
 mod rebuild;

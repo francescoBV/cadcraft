@@ -1,6 +1,6 @@
 # UI parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-22 · **Change:** minor (distinct polyline midpoint grips) · **Target:** Autodesk AutoCAD 2027 for Mac (26.0)
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-27 · **Change:** minor (lasso selection; selection 40% → 45%) · **Target:** Autodesk AutoCAD 2027 for Mac (26.0)
 
 How CADCraft's interaction compares with AutoCAD's: point entry, object snaps, tracking, dynamic
 input, grips, selection, the command line, chrome and navigation. A drafter's speed in AutoCAD
@@ -31,7 +31,7 @@ ignored; there are no context menus. Remaining: **≈ 110–170 Opus 5.5 hours**
 | Tracking, polar, ortho, grid/snap | 10% | 70% | 7.0 |
 | Dynamic input | 10% | 45% | 4.5 |
 | Grips | 10% | 40% | 4.0 |
-| Selection | 10% | 40% | 4.0 |
+| Selection | 10% | 45% | 4.5 |
 | Command line | 10% | 60% | 6.0 |
 | Chrome and palettes | 10% | 45% | 4.5 |
 | Navigation | 5% | 55% | 2.8 |
@@ -121,14 +121,14 @@ down-arrow options menu (DYNPROMPT), and DYNDIM.
 | Dynamic block grips | yes | no (no dynamic blocks) |
 | Grip appearance (GRIPSIZE, colours, hover) | yes | GRIPSIZE, GRIPS and GRIPOBJLIMIT honoured (Options ▸ Selection); polyline segment midpoints use rectangles, vertices use squares; no grip colours |
 
-## Selection (≈ 40%)
+## Selection (≈ 45%)
 
 | Feature | AutoCAD | CADCraft |
 |---|---|---|
 | Pick, implied window (left→right) and crossing (right→left) | yes | yes, coloured and dashed rectangles (`lib.rs:576-589`, `canvas.rs:823-836`), filled as SELECTIONAREA, WINDOWAREACOLOR, CROSSINGAREACOLOR and SELECTIONAREAOPACITY say (Visual Effect Settings) |
 | Keywords W, C, WP, CP, F, BOX, AU, SI, M, G (group), CL (class) | yes | yes except CLass: W, C, F, WP, CP (#226); BOX, AUto, SIngle, Multiple, Group, Add, Remove, Undo (#428); ALL, Last, Previous |
 | Press-drag selection windows (PICKDRAG) | yes | clicks or drag (2, default), or two clicks only (0); Options ▸ Selection ▸ Select using two clicks only, saved in the profile; drag-only mode (1) is unavailable |
-| Lasso | yes | **no** |
+| Lasso | yes | yes (LASSOMODE 1, the default, saved in the profile; Options ▸ Selection ▸ Press and drag draws a lasso): a press-and-drag in an empty area draws a free-form lasso, a window lasso dragged to the right, a crossing lasso to the left, filled as the selection area settings say; Space while dragging cycles window, crossing and fence, with the kind beside the cursor; a quick straight drag still selects as a rectangle; idle and at "Select objects"; needs PICKDRAG 2 |
 | Selection cycling (SELECTIONCYCLING) | yes | yes (#1143): SELECTIONCYCLING 2 lists the objects under a click (type, layer; the row under the pointer highlights its object), 1 the badge; Shift+Space steps the highlight through them (#1145); no Ctrl+W |
 | Selection preview, hover highlight | yes | selected and hovered objects redrawn in the selection colour, fills half see-through (SELECTIONEFFECT 1; 0 dashed), selection effect color; HIGHLIGHT (not saved), SELECTIONPREVIEW, PREVIEWEFFECT, PREVIEWFILTER (Visual Effect Settings) |
 | PICKADD, PICKFIRST, PICKAUTO | yes | PICKADD (Shift), PICKFIRST |
@@ -203,6 +203,7 @@ down-arrow options menu (DYNPROMPT), and DYNDIM.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | minor | Lasso selection (LASSOMODE): window, crossing and fence lassos, Space to cycle, idle and at "Select objects"; selection 40% → 45% (total unchanged at ≈ 48%) |
 | 2026-10-22 | minor | Polyline segment midpoint grips use rectangles, distinct from square vertex grips, with matching hover and pick bounds (#1950) |
 | 2026-10-13 | minor | Filled-region highlight boundaries are traversed in deterministic coordinate order, fixing dash-phase jumps on CPU hover/selection redraws and GPU highlight rebuilds; CPU dash-position, pixel and GPU mesh regressions |
 | 2026-10-14 | minor | Selection cycling (#1143): the list and badge of SELECTIONCYCLING, Shift+Space through overlapping objects (#1145) |
