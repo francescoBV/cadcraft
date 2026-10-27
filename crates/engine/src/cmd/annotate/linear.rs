@@ -78,7 +78,7 @@ fn chained(s: &Session, prev: &Dimension, next: Vec2, baseline: bool) -> EntityK
 /// Most dimensions one DIMCONTINUE/DIMBASELINE call adds.
 pub(super) const MAX_CHAIN: usize = 100_000;
 
-fn chain_run(s: &mut Session, p: &Value, baseline: bool) -> Result<Value> {
+pub(super) fn chain_run(s: &mut Session, p: &Value, baseline: bool) -> Result<Value> {
     let id = if baseline { "dimbaseline" } else { "dimcontinue" };
     let pts = p.get("points").and_then(Value::as_array).ok_or_else(|| bad(id, "`points` is required"))?;
     if pts.len() > MAX_CHAIN {
@@ -96,6 +96,7 @@ fn chain_run(s: &mut Session, p: &Value, baseline: bool) -> Result<Value> {
             dm.assoc = ix.auto_assoc(&[("p13", dm.p13.xy()), ("p14", dm.p14.xy())]);
         }
         let h = s.add_entity(k)?;
+        on_dim_layer(s, h)?;
         s.last_dim = Some(h);
         out.push(h.hex());
     }

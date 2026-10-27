@@ -2,7 +2,7 @@ use super::common::{DimText, add_dim, assoc_enabled, dim, hex_param, pick_at, se
 use super::*;
 
 /// Two-line angular dimension (type 2) between two lines, attached to them.
-fn angular_from_lines(s: &Session, h1: Handle, h2: Handle, at: Vec2) -> Option<EntityKind> {
+pub(super) fn angular_from_lines(s: &Session, h1: Handle, h2: Handle, at: Vec2) -> Option<EntityKind> {
     let d = s.doc().ok()?;
     let line = |h: Handle| match &d.entity(h)?.kind {
         EntityKind::Line(l) => Some((l.a.xy(), l.b.xy())),

@@ -213,6 +213,7 @@ pub(super) fn run(s: &mut Session, p: &Value) -> Result<Value> {
             };
         }
         let h = s.add_entity(k)?;
+        super::on_dim_layer(s, h)?;
         s.last_dim = Some(h);
         out.push(h.hex());
     }

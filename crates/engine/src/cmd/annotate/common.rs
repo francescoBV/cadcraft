@@ -26,7 +26,7 @@ pub(super) fn dim(s: &Session, kind: DimKind, defpt: Vec2, p13: Vec2, p14: Vec2,
 }
 
 /// Horizontal (0) or vertical (90°) from where the dimension line is placed (AutoCAD's rule).
-fn auto_rotation(p1: Vec2, p2: Vec2, at: Vec2) -> f64 {
+pub(super) fn auto_rotation(p1: Vec2, p2: Vec2, at: Vec2) -> f64 {
     let (x0, x1) = (p1.x.min(p2.x), p1.x.max(p2.x));
     let (y0, y1) = (p1.y.min(p2.y), p1.y.max(p2.y));
     let outside_y = at.y < y0 || at.y > y1;
@@ -49,8 +49,29 @@ pub(super) fn add_dim(s: &mut Session, k: EntityKind) -> Result<Handle> {
         dm.assoc = crate::assoc::reassociate(s.doc()?, &s.space(), dm);
     }
     let h = s.add_entity(k)?;
+    on_dim_layer(s, h)?;
     s.last_dim = Some(h);
     Ok(h)
+}
+
+/// DIMLAYER: the layer new dimensions go on ("" or ".": the current layer). A layer the
+/// drawing doesn't have leaves them on the current one.
+pub(super) fn dim_layer(s: &Session) -> Option<String> {
+    let d = s.doc().ok()?;
+    let name = d.header.str("DIMLAYER", "");
+    let name = name.trim();
+    if name.is_empty() || name == "." {
+        return None;
+    }
+    d.layer(name).map(|l| l.name.clone())
+}
+
+/// Move a new dimension to the DIMLAYER layer (when one is set).
+pub(super) fn on_dim_layer(s: &mut Session, h: Handle) -> Result<()> {
+    if let Some(layer) = dim_layer(s) {
+        s.doc_mut()?.modify_entity(h, |e| e.common.layer = layer)?;
+    }
+    Ok(())
 }
 
 pub(super) fn assoc_enabled(s: &Session) -> bool {

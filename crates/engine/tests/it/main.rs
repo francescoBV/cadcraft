@@ -113,6 +113,7 @@ mod selection_modes;
 mod setvar_cecolor;
 mod setvar_coverage;
 mod shapes;
+mod smart_dim;
 mod snap_annotations;
 mod snap_blocks;
 mod snap_curves;

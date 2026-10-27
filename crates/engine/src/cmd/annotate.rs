@@ -1,12 +1,13 @@
 //! Dimensions and leaders: DIMLINEAR, DIMALIGNED, DIMRADIUS, DIMDIAMETER, DIMANGULAR, DIMARC,
-//! DIMORDINATE, DIMCONTINUE, DIMBASELINE, QDIM, DIM (smart), MLEADER, LEADER, DIMOVERRIDE,
+//! DIMORDINATE, DIMCONTINUE, DIMBASELINE, QDIM, MLEADER, LEADER, DIMOVERRIDE,
 //! DIMREASSOCIATE / DIMDISASSOCIATE, DIMTEDIT, DIMSPACE; DIMEDIT, DIMJOGGED, DIMJOGLINE,
-//! DIMBREAK and DIMINSPECT in `annotate_dimedit.rs`.
+//! DIMBREAK and DIMINSPECT in `annotate_dimedit.rs`; DIM (smart) in `annotate_smartdim.rs`.
 
 use cadcraft_doc::{AssocSnap, DimAssoc, DimKind, Dimension, EntityKind, Handle, MLeader, MText, Prim};
 use cadcraft_geom::{Segment, Vec2, Vec3};
 use serde_json::{Value, json};
 
+use super::bool_or;
 use super::helpers::v3;
 use super::machines::{SelOutcome, SelectPhase, SelectRun};
 use super::{CommandSpec, bad, point_param, point_req, points_param, str_param, targets};
@@ -20,10 +21,12 @@ mod linear;
 mod mleader;
 mod radial;
 
+use angular::angular_from_lines;
 use angular::{AngularM, ArcLenM, run_angular, run_arclen};
 pub(super) use common::segment_at;
-use common::{DimText, add_dim, assoc_enabled, circle_of, dim, pick_at};
+use common::{DimText, add_dim, assoc_enabled, auto_rotation, circle_of, dim, dim_layer, hex_param, linear_kind, on_dim_layer, pick_at, text_at};
 use edit::{DimSpaceM, OverrideM, dims_of, run_dimspace, run_dimtedit, run_disassociate, run_override, run_reassociate, run_tedit, run_update};
+use linear::chain_run;
 use linear::{ChainM, LinearM, MAX_CHAIN, OrdinateM, run_aligned, run_baseline, run_continue, run_linear, run_ordinate};
 use mleader::{MLeaderM, run_leader, run_mleader};
 use radial::{RadialM, run_diameter, run_radius};
@@ -79,10 +82,6 @@ pub fn specs() -> Vec<CommandSpec> {
             .menu(&["Dimension", "Quick Dimension"])
             .params(qdim::PARAMS)
             .interactive(|_| Ok(Box::new(qdim::QDimM::new()))),
-        CommandSpec::new("dim", "Dimension", run_linear)
-            .menu(&["Dimension", "Dimension"])
-            .params("{p1, p2, at}")
-            .interactive(|_| Ok(Box::new(LinearM::new(false)))),
         CommandSpec::new("mleader", "Multileader", run_mleader)
             .menu(&["Dimension", "Multileader"])
             .alias(&["mld"])
@@ -128,6 +127,7 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
     .into_iter()
     .chain(dimedit::specs())
+    .chain(smartdim::specs())
     .collect()
 }
 
@@ -140,6 +140,9 @@ mod tedit;
 
 #[path = "annotate_dimedit.rs"]
 mod dimedit;
+
+#[path = "annotate_smartdim.rs"]
+mod smartdim;
 
 #[cfg(test)]
 mod tests;
