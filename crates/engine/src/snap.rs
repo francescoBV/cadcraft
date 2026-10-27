@@ -507,14 +507,15 @@ fn finish(
         }
     }
     let visible = |p: Vec2| p.is_finite() && clip.is_none_or(|c| c.contains(p));
-    let best = cands.iter().filter(|(_, p)| visible(*p) && p.dist(cursor) <= aperture).min_by(|a, b| {
-        // Prefer more specific modes when nearly equidistant.
-        let da = snap_score(a.0, a.1, cursor, aperture);
-        let db = snap_score(b.0, b.1, cursor, aperture);
-        da.total_cmp(&db)
-    });
-    if let Some((m, p)) = best {
-        return Some(SnapHit { point: *p, mode: *m, name: name_of(*m), viewport: None, deferred: None });
+    // Prefer more specific modes when nearly equidistant.
+    let mut scored: Vec<(f64, u32, Vec2)> = cands
+        .iter()
+        .filter(|(_, p)| visible(*p) && p.dist(cursor) <= aperture)
+        .map(|(m, p)| (snap_score(*m, *p, cursor, aperture), *m, *p))
+        .collect();
+    scored.extend(curve_centers(near_prims, cursor, aperture, osmode).into_iter().filter(|(_, c)| visible(*c)).map(|(d, c)| (d, mode::CEN, c)));
+    if let Some((_, m, p)) = scored.into_iter().min_by(|a, b| a.0.total_cmp(&b.0)) {
+        return Some(SnapHit { point: p, mode: m, name: name_of(m), viewport: None, deferred: None });
     }
     if base.is_none()
         && deferred
@@ -544,6 +545,30 @@ fn finish(
         }
     }
     None
+}
+
+/// Center, as in AutoCAD: with the cursor over a circle, an arc (also a polyline's) or an
+/// ellipse, the running Center snap finds its center however far away it is. Each center comes
+/// with how far the curve is from `cursor` (its score), so a nearer endpoint or intersection still
+/// wins. Empty unless Center is among `osmode`.
+fn curve_centers(prims: &[Prim], cursor: Vec2, aperture: f64, osmode: u32) -> Vec<(f64, Vec2)> {
+    let mut out = Vec::new();
+    if osmode & mode::CEN == 0 {
+        return out;
+    }
+    for p in prims.iter().take(2000) {
+        let (center, on) = match p {
+            Prim::Circle(c) => (c.center, c.closest(cursor)),
+            Prim::Seg(s @ Segment::Arc { arc, .. }) => (arc.center, fix_circle(s).closest(cursor)),
+            Prim::Ellipse(e) => (e.center, e.closest(cursor)),
+            _ => continue,
+        };
+        let d = on.dist(cursor);
+        if center.is_finite() && d.is_finite() && d <= aperture {
+            out.push((d, center));
+        }
+    }
+    out
 }
 
 fn snap_score(mode: u32, point: Vec2, cursor: Vec2, aperture: f64) -> f64 {
