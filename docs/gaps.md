@@ -1,6 +1,6 @@
 # Where CADCraft falls short of AutoCAD
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-25 · **Change:** minor (DIMTFILL limits in the `*D` block, EXPLODE and DXF: F7 updated) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-27 · **Change:** minor (DXF: mirrored extrusions and unchanged dimension text kept: FF1 narrowed) · **Target:** Autodesk AutoCAD 2027
 
 Every known shortfall, one row each, ranked within each section by user impact. This is the work
 list: agents pick from here (top of a section first), and remove or update a row in the same PR
@@ -73,7 +73,7 @@ Detail: [file-format-parity.md](file-format-parity.md).
 
 | # | Gap | User impact | Est. |
 |---|---|---|---|
-| FF1 | **[alpha blocker]** Round-trip what we don't model. DXF done (#528): unknown entities and objects (with their CLASS records), foreign xdata (hyperlinks included), extension dictionaries, persistent reactors, DICTIONARYVAR and XRECORDs, layer states, colour book colours, references remapped on save; IMAGE, VIEW/UCS, groups, block descriptions, true colours, transparency (#201, #204, #208, #209, #213, #223); WIPEOUT and gradients (#147, #162). Left: through DWG, acadrust drops custom-class entities and objects, xdata on table records and blocks, entity colour book names and reactors; UCS elevation; MTEXT background colours; unknown entities follow only layer edits, and renamed layers and blocks lose their foreign data | High | 6–10 |
+| FF1 | **[alpha blocker]** Round-trip what we don't model. DXF done (#528): unknown entities and objects (with their CLASS records), foreign xdata (hyperlinks included), extension dictionaries, persistent reactors, DICTIONARYVAR and XRECORDs, layer states, colour book colours, references remapped on save; IMAGE, VIEW/UCS, groups, block descriptions, true colours, transparency (#201, #204, #208, #209, #213, #223); WIPEOUT and gradients (#147, #162); entities read mirrored (extrusion 0,0,-1) keep their OCS and extrusion, and unchanged dimensions their text position and measurement (2026-10-27). Left: TEXT, MTEXT and HATCH read under extrusion -Z are written back in the plan view; through DWG, acadrust drops custom-class entities and objects, xdata on table records and blocks, entity colour book names and reactors; UCS elevation; MTEXT background colours; unknown entities follow only layer edits, and renamed layers and blocks lose their foreign data | High | 6–10 |
 | FF2 | Multileader leftovers (native MULTILEADER read/write landed, #459): several landings per multileader (extra leader roots are folded into the lines), per-object overrides (leader colour and linetype, arrowhead symbol, text frame), annotative scale contexts; check the text placement of our MULTILEADER output in AutoCAD | Medium | 3–5 |
 | FF3 | Save-version leftovers (DXF/DWG 2000–2018, binary DXF, SAVEAS `version`/`binary` and the default save version landed, #421): no R14 DWG or R12 DXF output; the Save dialog can't pick the version per file (the file picker doesn't report the chosen type; File > Default Save Format sets it); no command-line SAVEAS format prompt | Low | 2–4 |
 | FF4 | Code-page leftovers (pre-2007 DXF read in their `$DWGCODEPAGE` landed, #505): Johab (ANSI_1361) and DOS 855/857/860–865/869 read as ANSI_1252; saving declares `ANSI_1252` instead of the file's code page (the text is pure ASCII, so still correct); acadrust approximates DOS code pages in pre-2007 DWG (DOS437 as 866, DOS850 as 1252) | Low | 1–2 |
@@ -150,6 +150,7 @@ Detail: [localization-parity.md](localization-parity.md).
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-27 | minor | DXF entities: LINE, CIRCLE, ARC, ELLIPSE, LWPOLYLINE, INSERT, DIMENSION, LEADER, SOLID and TRACE read with extrusion (0,0,-1) are written back in that OCS with their extrusion; dimensions saved unchanged keep their text position and measurement: FF1 narrowed |
 | 2026-10-25 | minor | DIMTFILL limits: with DIMTFILL 1 (the drawing's background color) the written `*D` block and EXPLODE keep no background mask (a WIPEOUT over the text box would), and a true-color DIMTFILLCLR is written to DXF as the nearest ACI: F7 updated |
 | 2026-10-24 | minor | COMPAREEXPORT (typed, or Export on the comparison bar) opens the comparison as a new untitled drawing, `compare_<this> vs <other>.dwg`: this drawing's objects in one group and the other drawing's differing objects in a second group, in the comparison colors (green, red, gray for objects in both), block contents and style colors included: F22 narrowed |
 | 2026-10-24 | minor | DIMTFILL and DIMTFILLCLR: a dimension's text background (none, the drawing's background color, or a color) hides what is drawn under the text; SETVAR, DIMOVERRIDE and style fields, DIMSTYLE groups 69 and 70 in DXF from R2007 (CADCraft xdata before), and a SOLID in the `*D` block and from EXPLODE for DIMTFILL 2: F7 narrowed |

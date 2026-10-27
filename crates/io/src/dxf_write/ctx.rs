@@ -32,6 +32,9 @@ pub(super) struct Ctx {
     pub(super) paper_views: HashMap<Handle, usize>,
     /// Dimension → anonymous `*D` block name.
     pub(super) dim_blocks: HashMap<Handle, String>,
+    /// Dimensions whose block is written as read (unchanged since read): their text position
+    /// and measurement are written as read too, not recomputed.
+    pub(super) dims_as_read: std::collections::HashSet<Handle>,
     /// Upper-case text style name → STYLE record handle.
     pub(super) styles: HashMap<String, String>,
     /// Upper-case arrow name (as stored in styles/overrides) → BLOCK_RECORD handle.

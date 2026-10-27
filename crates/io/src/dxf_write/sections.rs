@@ -60,6 +60,7 @@ pub(super) fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Ta
                     // (edits drop the link, and the screen draws that block): the block is written
                     // as read, so other programs show it as they drew it.
                     Some(b) if !b.entities.is_empty() => {
+                        cx.dims_as_read.insert(e.handle);
                         ents = b.entities.iter().map(|x| x.as_ref().clone()).collect();
                         reused_handles.extend(ents.iter().map(|x| x.handle).filter(|h| h.0 != 0));
                         b.name.clone()
@@ -85,6 +86,18 @@ pub(super) fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Ta
                 cx.dim_blocks.insert(e.handle, name.clone());
                 dim_defs.push((name, brh, ents));
             }
+        }
+    }
+    // Dimensions inside blocks keep the blocks they were read with (written as ordinary blocks).
+    for e in d.blocks.values().flat_map(|b| b.entities.iter()) {
+        if let EntityKind::Dimension(dm) = &e.kind
+            && dm
+                .block
+                .as_deref()
+                .and_then(|n| d.block(n))
+                .is_some_and(|b| !b.entities.is_empty() && !dim_plan.skip.contains(&b.name.to_ascii_uppercase()))
+        {
+            cx.dims_as_read.insert(e.handle);
         }
     }
     // Every entity, including block contents (for arrows, tables and overrides).
