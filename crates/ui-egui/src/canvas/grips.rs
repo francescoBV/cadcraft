@@ -25,6 +25,46 @@ pub(super) fn click_grip(app: &mut CadApp, g: (Handle, usize), shift: bool) {
     }
 }
 
+/// Ctrl pressed and let go on its own while a grip is hot steps to the grip's next option
+/// (Stretch, Add Vertex, Remove Vertex…), as in AutoCAD. Ctrl held for a key, a click or a scroll
+/// (Ctrl+Z, Ctrl+click) is not a tap. A quick tap can go down and up within one frame, so the
+/// frame's modifier changes are followed in order.
+pub(super) fn ctrl_cycle(app: &mut CadApp, ui: &egui::Ui) {
+    /// Ctrl down (`Some(still a tap)`) or up; `tap` is set when a clean press ends.
+    fn step(state: Option<bool>, down: bool, tap: &mut bool) -> Option<bool> {
+        match (state, down) {
+            (None, true) => Some(true),
+            (Some(clean), false) => {
+                *tap |= clean;
+                None
+            }
+            (state, _) => state,
+        }
+    }
+    let (state, tap) = ui.input(|i| {
+        let (mut state, mut tap, mut changes) = (app.canvas.ctrl_tap, false, false);
+        for e in &i.events {
+            match e {
+                egui::Event::ModifiersChanged(m) => {
+                    changes = true;
+                    state = step(state, m.ctrl, &mut tap);
+                }
+                egui::Event::PointerMoved(_) | egui::Event::MouseMoved(_) | egui::Event::PointerGone => {}
+                _ => state = state.map(|_| false),
+            }
+        }
+        // An integration that only reports the modifiers' state.
+        if !changes {
+            state = step(state, i.modifiers.ctrl, &mut tap);
+        }
+        (state, tap)
+    });
+    app.canvas.ctrl_tap = state;
+    if tap && let Err(e) = app.session.cycle_grip_option() {
+        app.session.echo(e.to_string());
+    }
+}
+
 /// The multifunctional options of grip `g` (Add Vertex, Lengthen…; empty: Stretch only).
 pub(super) fn grip_options(app: &CadApp, (h, i): (Handle, usize)) -> Vec<cadcraft_engine::grips::GripAction> {
     let Ok(st) = app.session.state() else { return Vec::new() };
