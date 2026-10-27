@@ -64,6 +64,9 @@ const HEADER: &[(&str, Kind, Def)] = &[
     // Negative: Through (OFFSET picks a point).
     ("OFFSETDIST", Kind::AnyReal, Def::Real(-1.0)),
     ("OFFSETERASE", Kind::Choice(&[0, 1]), Def::Int(0)),
+    // How OFFSET fills the gap at the outside of a polyline corner: 0 extends the segments to meet,
+    // 1 fills it with an arc of the offset distance, 2 with a chamfer line.
+    ("OFFSETGAPTYPE", Kind::Choice(&[0, 1, 2]), Def::Int(0)),
     ("OFFSETLAYER", Kind::Choice(&[0, 1]), Def::Int(0)),
     ("POLYSIDES", Kind::Int(3, 1024), Def::Int(4)),
     ("PROJMODE", Kind::Choice(&[0, 1, 2]), Def::Int(1)),

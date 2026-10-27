@@ -15,8 +15,59 @@ fn offsettable(k: &EntityKind) -> bool {
     )
 }
 
-/// Offset an entity by `dist` towards `side`. Returns the new geometry.
-pub(crate) fn offset_kind(k: &EntityKind, dist: f64, side: Vec2) -> Option<EntityKind> {
+/// Offset an entity by `dist` towards `side` (OFFSETGAPTYPE `gap` for polyline corners).
+/// Returns the new geometry: usually one object, several where a polyline's offset splits, none
+/// where it collapses.
+pub(crate) fn offset_kinds(k: &EntityKind, dist: f64, side: Vec2, gap: GapType) -> Vec<EntityKind> {
+    match k {
+        EntityKind::LwPolyline(p) => {
+            let pl = Polyline { vertices: p.vertices.clone(), closed: p.closed };
+            let Some(left) = polyline_side_is_left(&pl, side) else { return Vec::new() };
+            // Widths don't move the offset (it is of the centre line); a constant width carries over.
+            pl.offset(if left { dist } else { -dist }, gap)
+                .into_iter()
+                .map(|o| {
+                    let mut k = lwpoly(o.vertices, o.closed);
+                    if let EntityKind::LwPolyline(n) = &mut k {
+                        n.const_width = p.const_width;
+                        n.elevation = p.elevation;
+                        n.plinegen = p.plinegen;
+                    }
+                    k
+                })
+                .collect()
+        }
+        _ => offset_kind(k, dist, side).into_iter().collect(),
+    }
+}
+
+/// Whether `side` lies to the left of a polyline's direction of travel, judged at its nearest
+/// point (on an arc: inside a counter-clockwise one, outside a clockwise one).
+fn polyline_side_is_left(pl: &Polyline, side: Vec2) -> Option<bool> {
+    let segs = pl.segments();
+    let nearest =
+        segs.iter().filter(|s| s.closest(side).is_finite()).min_by(|a, b| a.closest(side).dist(side).total_cmp(&b.closest(side).dist(side)))?;
+    Some(match nearest {
+        Segment::Line(l) => l.side(side) > 0.0,
+        Segment::Arc { arc, ccw } => (side.dist(arc.center) < arc.radius) == *ccw,
+    })
+}
+
+/// The exact distance from `p` to an object OFFSET works on (Through mode), if it is one.
+fn offset_distance(k: &EntityKind, p: Vec2) -> Option<f64> {
+    let d = match k {
+        EntityKind::Line(l) => Line::new(l.a.xy(), l.b.xy()).dist(p),
+        EntityKind::Circle(c) => (p.dist(c.center.xy()) - c.radius).abs(),
+        EntityKind::Arc(a) => Segment::Arc { arc: Arc::new(a.center.xy(), a.radius, a.start, a.end), ccw: true }.closest(p).dist(p),
+        EntityKind::LwPolyline(pl) => Polyline { vertices: pl.vertices.clone(), closed: pl.closed }.closest(p)?.dist(p),
+        EntityKind::XLine(r) | EntityKind::Ray(r) => Line::new(r.base.xy(), r.base.xy() + r.dir.xy()).project(p).dist(p),
+        _ => return None,
+    };
+    d.is_finite().then_some(d)
+}
+
+/// Offset an entity other than a polyline by `dist` towards `side`.
+fn offset_kind(k: &EntityKind, dist: f64, side: Vec2) -> Option<EntityKind> {
     match k {
         EntityKind::Line(l) => {
             let ln = Line::new(l.a.xy(), l.b.xy());
@@ -51,23 +102,6 @@ pub(crate) fn offset_kind(k: &EntityKind, dist: f64, side: Vec2) -> Option<Entit
             ge.tessellate(e.major.xy().len() * 1e-3, &mut pts);
             let off = offset_points(&pts, if inside { dist } else { -dist }, ge.is_full());
             Some(lwpoly(off.into_iter().map(PolyVertex::new).collect(), ge.is_full()))
-        }
-        EntityKind::LwPolyline(p) => {
-            let pl = Polyline { vertices: p.vertices.clone(), closed: p.closed };
-            // Side: compare with the nearest segment.
-            let segs = pl.segments();
-            let nearest = segs.iter().min_by(|a, b| a.closest(side).dist(side).total_cmp(&b.closest(side).dist(side)))?;
-            let c = nearest.closest(side);
-            let t = nearest.tangent(0.5);
-            let left = t.cross(side - c) > 0.0;
-            let d = if left { dist } else { -dist };
-            offset_polyline(&pl, d).map(|vs| {
-                let mut k = lwpoly(vs, p.closed);
-                if let EntityKind::LwPolyline(n) = &mut k {
-                    n.const_width = p.const_width;
-                }
-                k
-            })
         }
         EntityKind::Spline(sp) => {
             let pts = sp.tessellate(1e-3);
@@ -132,98 +166,56 @@ fn offset_points(pts: &[Vec2], d: f64, closed: bool) -> Vec<Vec2> {
     out
 }
 
-/// Offset a polyline: offset each segment, then join neighbours at their intersections.
-pub(crate) fn offset_polyline(pl: &Polyline, d: f64) -> Option<Vec<PolyVertex>> {
-    let segs: Vec<Segment> = pl.segments().iter().filter_map(|s| s.offset(d)).collect();
-    if segs.is_empty() {
-        return None;
-    }
-    let n = segs.len();
-    // Where each offset segment starts after joining it to the previous one.
-    let mut starts: Vec<Vec2> = Vec::with_capacity(n);
-    for i in 0..n {
-        let s = segs.get(i)?;
-        starts.push(if i == 0 && !pl.closed {
-            s.start()
-        } else {
-            let prev = segs.get((i + n - 1) % n)?;
-            join_point(prev, s).unwrap_or(s.start())
-        });
-    }
-    let mut verts: Vec<PolyVertex> = Vec::new();
-    for i in 0..n {
-        let s = segs.get(i)?;
-        let start = *starts.get(i)?;
-        let end = if i + 1 < n {
-            *starts.get(i + 1)?
-        } else if pl.closed {
-            *starts.first()?
-        } else {
-            s.end()
-        };
-        let bulge = match s {
-            Segment::Line(_) => 0.0,
-            Segment::Arc { arc, ccw } => {
-                // The joined endpoints may have moved along the circle: take the sweep between them.
-                let sweep = if start.near(end, 1e-9) {
-                    arc.sweep()
-                } else if *ccw {
-                    ccw_sweep(arc.center.angle_to(start), arc.center.angle_to(end))
-                } else {
-                    ccw_sweep(arc.center.angle_to(end), arc.center.angle_to(start))
-                };
-                cadcraft_geom::arc_to_bulge(if *ccw { sweep } else { -sweep })
-            }
-        };
-        verts.push(PolyVertex { p: start, bulge, start_width: 0.0, end_width: 0.0 });
-    }
-    if !pl.closed {
-        verts.push(PolyVertex::new(segs.last()?.end()));
-    }
-    Some(verts)
-}
-
-fn join_point(a: &Segment, b: &Segment) -> Option<Vec2> {
-    if a.end().near(b.start(), 1e-9) {
-        return Some(b.start());
-    }
-    let hits = intersect_ext(a, b, true);
-    hits.into_iter().min_by(|x, y| x.dist(a.end()).total_cmp(&y.dist(a.end())))
-}
-
 pub(super) fn run_offset(s: &mut Session, p: &Value) -> Result<Value> {
     let h = targets(s, p)?.first().copied().ok_or_else(|| bad("offset", "`handle` is required"))?;
     let dist = f64_req("offset", p, "distance")?;
     let side = point_req("offset", p, "side")?;
     let e = s.doc()?.entity(h).map(|e| (**e).clone()).ok_or_else(|| bad("offset", "no such object"))?;
-    let k = offset_kind(&e.kind, dist.abs(), side).ok_or_else(|| bad("offset", "cannot offset that object"))?;
+    let gap = match p.get("gapType") {
+        Some(v) => GapType::from_index(v.as_i64().filter(|g| (0..=2).contains(g)).ok_or_else(|| bad("offset", "`gapType` is 0, 1 or 2"))?),
+        None => offset_gap(s),
+    };
+    let ks = offset_kinds(&e.kind, dist.abs(), side, gap);
+    if ks.is_empty() {
+        return Err(bad("offset", "cannot offset that object"));
+    }
     let current_layer = match str_param(p, "layer").map(str::to_ascii_lowercase).as_deref() {
         None | Some("source") => false,
         Some("current") => true,
         Some(_) => return Err(bad("offset", "`layer` is \"source\" or \"current\"")),
     };
-    let nh = add_offset(s, &e, k, current_layer, bool_or(p, "erase", false))?;
-    Ok(json!({ "handle": nh.hex() }))
+    let hs = add_offsets(s, &e, ks, current_layer, bool_or(p, "erase", false))?;
+    let first = hs.first().map(|h| h.hex()).unwrap_or_default();
+    Ok(json!({ "handle": first, "handles": hs.iter().map(|h| h.hex()).collect::<Vec<_>>() }))
 }
 
-/// Add the offset copy `k` of `src` (on the current layer instead of the source's when
+/// OFFSETGAPTYPE: how polyline corners are filled.
+fn offset_gap(s: &Session) -> GapType {
+    GapType::from_index(s.doc().map_or(0, |d| d.header.i64("OFFSETGAPTYPE", 0)))
+}
+
+/// Add the offset copies `ks` of `src` (on the current layer instead of the source's when
 /// `current_layer`), then erase the source when `erase` and its layer is not locked.
-fn add_offset(s: &mut Session, src: &Entity, k: EntityKind, current_layer: bool, erase: bool) -> Result<Handle> {
+fn add_offsets(s: &mut Session, src: &Entity, ks: Vec<EntityKind>, current_layer: bool, erase: bool) -> Result<Vec<Handle>> {
     let space = s.space();
     let d = s.doc_mut()?;
     let mut common = src.common.clone();
     if current_layer {
         common.layer = d.header.str("CLAYER", "0");
     }
-    let nh = d.new_handle();
-    if let Some(st) = d.space_mut(&space) {
-        st.push(Entity { handle: nh, common, kind: k });
+    let mut out = Vec::with_capacity(ks.len());
+    for k in ks {
+        let nh = d.new_handle();
+        if let Some(st) = d.space_mut(&space) {
+            st.push(Entity { handle: nh, common: common.clone(), kind: k });
+        }
+        out.push(nh);
     }
     let locked = d.layer(&src.common.layer).is_some_and(|l| l.locked);
-    if erase && !locked {
+    if erase && !locked && !out.is_empty() {
         d.remove_entity(src.handle);
     }
-    Ok(nh)
+    Ok(out)
 }
 
 /// An OFFSET option prompt opened from "Specify offset distance".
@@ -291,8 +283,9 @@ impl Interactive for OffsetM {
             s.set_selection(Vec::new());
         }
         let (erase, current) = offset_options(s);
+        let gap = s.doc().map_or(0, |d| d.header.i64("OFFSETGAPTYPE", 0));
         s.echo(format!(
-            "Current settings: Erase source={}  Layer={}  OFFSETGAPTYPE=0",
+            "Current settings: Erase source={}  Layer={}  OFFSETGAPTYPE={gap}",
             if erase { "Yes" } else { "No" },
             if current { "Current" } else { "Source" }
         ));
@@ -454,22 +447,26 @@ impl Interactive for OffsetM {
                 if let Some(e) = e {
                     let dist = match self.dist {
                         Some(d) => d,
-                        None => {
-                            let polys = crate::select::hit_polylines(s.doc()?, &e, 1e-4);
-                            polys
-                                .iter()
-                                .flat_map(|pl| pl.windows(2).filter_map(|w| Some(Line::new(*w.first()?, *w.get(1)?).dist(p))))
-                                .fold(f64::INFINITY, f64::min)
-                        }
+                        // Through: the exact distance to the point.
+                        None => match offset_distance(&e.kind, p) {
+                            Some(d) => d,
+                            None => {
+                                let polys = crate::select::hit_polylines(s.doc()?, &e, 1e-4);
+                                polys
+                                    .iter()
+                                    .flat_map(|pl| pl.windows(2).filter_map(|w| Some(Line::new(*w.first()?, *w.get(1)?).dist(p))))
+                                    .fold(f64::INFINITY, f64::min)
+                            }
+                        },
                     };
-                    match offset_kind(&e.kind, dist, p) {
-                        Some(k) => {
-                            let before = s.state()?.doc.clone();
-                            let (erase, current) = offset_options(s);
-                            made = Some(add_offset(s, &e, k, current, erase)?);
-                            self.undo.push((before, Some(h)));
-                        }
-                        None => s.echo("Cannot offset that object."),
+                    let ks = offset_kinds(&e.kind, dist, p, offset_gap(s));
+                    if ks.is_empty() {
+                        s.echo("Cannot offset that object.");
+                    } else {
+                        let before = s.state()?.doc.clone();
+                        let (erase, current) = offset_options(s);
+                        made = add_offsets(s, &e, ks, current, erase)?.last().copied();
+                        self.undo.push((before, Some(h)));
                     }
                 }
                 // Multiple mode carries on from the new copy.
@@ -490,8 +487,8 @@ impl Interactive for OffsetM {
         let Some(e) = d.entity(h) else { return Vec::new() };
         let dist = match self.dist {
             Some(x) => x,
-            None => crate::select::entity_distance(d, e, c, 1e-3),
+            None => offset_distance(&e.kind, c).unwrap_or_else(|| crate::select::entity_distance(d, e, c, 1e-3)),
         };
-        offset_kind(&e.kind, dist, c).into_iter().collect()
+        offset_kinds(&e.kind, dist, c, GapType::from_index(d.header.i64("OFFSETGAPTYPE", 0)))
     }
 }

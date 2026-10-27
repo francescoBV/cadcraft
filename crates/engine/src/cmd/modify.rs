@@ -3,7 +3,8 @@
 
 use cadcraft_doc::{Entity, EntityKind, Handle, Prim};
 use cadcraft_geom::{
-    Arc, Circle, Line, Mat3, PolyVertex, Polyline, Segment, TAU, Vec2, angle_in_sweep, ccw_sweep, intersect_ext, line_line_infinite, norm_angle,
+    Arc, Circle, GapType, Line, Mat3, PolyVertex, Polyline, Segment, TAU, Vec2, angle_in_sweep, ccw_sweep, intersect_ext, line_line_infinite,
+    norm_angle,
 };
 use serde_json::{Value, json};
 
@@ -76,7 +77,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("offset", "Offset", run_offset)
             .menu(&["Modify", "Offset"])
             .alias(&["o"])
-            .params("{handle, distance, side: [x,y], erase?: bool, layer?: \"source\"|\"current\"}")
+            .params("{handle, distance, side: [x,y], erase?: bool, layer?: \"source\"|\"current\", gapType?: 0|1|2 (OFFSETGAPTYPE: polyline corners extended, filleted or chamfered)} → {handle, handles} (a polyline offset can split into several)")
             .interactive(|s| Ok(Box::new(OffsetM::new(s)))),
         CommandSpec::new("trim", "Trim", trimextend::run_trim)
             .menu(&["Modify", "Trim"])

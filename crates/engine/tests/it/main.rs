@@ -80,6 +80,7 @@ mod non_finite_edits;
 mod offset_closed_spline;
 mod offset_ellipse_side;
 mod offset_move;
+mod offset_polyline_exact;
 mod options_profile;
 mod overkill;
 mod parallel_display_list;

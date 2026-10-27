@@ -755,6 +755,203 @@ fn offset_polyline_arc_bulge_follows_joined_endpoints() {
     assert!((arc.radius - 4.0).abs() < 1e-6, "radius {}", arc.radius);
 }
 
+/// Offset the polyline `pts` by 1 towards `side` with OFFSETGAPTYPE = `gap`.
+fn offset_with_gap(pts: Value, closed: bool, side: [f64; 2], gap: i64) -> cadcraft_doc::LwPolyline {
+    let mut s = Session::new();
+    s.execute("setvar", &json!({"name": "OFFSETGAPTYPE", "value": gap})).unwrap();
+    let pl = pline(&mut s, pts, closed);
+    s.execute("offset", &json!({"handle": pl, "distance": 1, "side": side})).unwrap();
+    poly(&last(&s))
+}
+
+fn area(p: &cadcraft_doc::LwPolyline) -> f64 {
+    Polyline { vertices: p.vertices.clone(), closed: p.closed }.area()
+}
+
+fn square() -> Value {
+    json!([[0, 0], [10, 0], [10, 10], [0, 10]])
+}
+
+// The OFFSETGAPTYPE tests below follow upstream PR #1506 (by mattlafy).
+#[test]
+fn offset_gap_type_extends_fillets_or_chamfers_outside_corners() {
+    let p = offset_with_gap(square(), true, [12.0, 5.0], 0);
+    assert_eq!(p.vertices.len(), 4);
+    assert!(p.vertices.iter().all(|v| v.bulge == 0.0));
+    assert!((area(&p) - 144.0).abs() < 1e-9, "area {}", area(&p));
+
+    let p = offset_with_gap(square(), true, [12.0, 5.0], 1);
+    assert_eq!(p.vertices.len(), 8);
+    let q = (std::f64::consts::PI / 8.0).tan();
+    assert_eq!(p.vertices.iter().filter(|v| (v.bulge - q).abs() < 1e-9).count(), 4, "{:?}", p.vertices);
+    assert_eq!(p.vertices.iter().filter(|v| v.bulge == 0.0).count(), 4);
+    assert!((area(&p) - (140.0 + std::f64::consts::PI)).abs() < 1e-9, "area {}", area(&p));
+    for (i, v) in p.vertices.iter().enumerate().filter(|(_, v)| v.bulge != 0.0) {
+        let (arc, ccw) = cadcraft_geom::bulge_to_arc(v.p, p.vertices[(i + 1) % 8].p, v.bulge).unwrap();
+        assert!(ccw && (arc.radius - 1.0).abs() < 1e-9, "{arc:?}");
+        assert!([(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)].iter().any(|&(x, y)| near(arc.center, x, y)), "{arc:?}");
+    }
+
+    let p = offset_with_gap(square(), true, [12.0, 5.0], 2);
+    assert_eq!(p.vertices.len(), 8);
+    assert!(p.vertices.iter().all(|v| v.bulge == 0.0));
+    let k = std::f64::consts::SQRT_2 - 1.0;
+    assert!(p.vertices.iter().any(|v| near(v.p, 10.0 + k, -1.0)) && p.vertices.iter().any(|v| near(v.p, 11.0, -k)), "{:?}", p.vertices);
+    // Every chamfer lies at distance 1 from its corner.
+    let corners = [Vec2::new(0.0, 0.0), Vec2::new(10.0, 0.0), Vec2::new(10.0, 10.0), Vec2::new(0.0, 10.0)];
+    for i in 0..8 {
+        let (a, b) = (p.vertices[i].p, p.vertices[(i + 1) % 8].p);
+        if a.dist(b) < 2.0 {
+            let c = corners.iter().min_by(|x, y| x.dist(a).total_cmp(&y.dist(a))).unwrap();
+            assert!((cadcraft_geom::Line::new(a, b).dist(*c) - 1.0).abs() < 1e-9, "chamfer {a:?}-{b:?}");
+        }
+    }
+    assert!((area(&p) - (144.0 - 2.0 * (1.0 - k) * (1.0 - k))).abs() < 1e-9, "area {}", area(&p));
+}
+
+#[test]
+fn offset_gap_type_handles_open_outside_corners_in_both_orientations() {
+    let k = std::f64::consts::SQRT_2 - 1.0;
+    // A left turn offset to the right and a right turn offset to the left: the corner at (10, 0)
+    // is outside in both, with the copies at y = -1 / x = 11 and y = 1 / x = 11.
+    for (pts, side, sy) in [(json!([[0, 0], [10, 0], [10, 10]]), [5.0, -2.0], -1.0), (json!([[0, 0], [10, 0], [10, -10]]), [5.0, 2.0], 1.0)] {
+        let p = offset_with_gap(pts.clone(), false, side, 1);
+        assert_eq!(p.vertices.len(), 4, "{:?}", p.vertices);
+        assert!(near(p.vertices[1].p, 10.0, sy) && near(p.vertices[2].p, 11.0, 0.0), "{:?}", p.vertices);
+        let (arc, ccw) = cadcraft_geom::bulge_to_arc(p.vertices[1].p, p.vertices[2].p, p.vertices[1].bulge).unwrap();
+        assert_eq!(ccw, sy < 0.0, "{arc:?}");
+        assert!(near(arc.center, 10.0, 0.0) && (arc.radius - 1.0).abs() < 1e-9, "{arc:?}");
+
+        let p = offset_with_gap(pts, false, side, 2);
+        assert_eq!(p.vertices.len(), 4, "{:?}", p.vertices);
+        assert!(p.vertices.iter().all(|v| v.bulge == 0.0));
+        let (a, b) = (p.vertices[1].p, p.vertices[2].p);
+        assert!(near(a, 10.0 + k, sy) && near(b, 11.0, sy * k), "{:?}", p.vertices);
+        assert!((cadcraft_geom::Line::new(a, b).dist(Vec2::new(10.0, 0.0)) - 1.0).abs() < 1e-9, "chamfer {a:?}-{b:?}");
+    }
+}
+
+#[test]
+fn offset_gap_type_leaves_inside_corners_alone() {
+    let inward: Vec<_> = (0..3).map(|g| offset_with_gap(square(), true, [5.0, 2.0], g).vertices).collect();
+    assert_eq!(inward[0].len(), 4);
+    assert!(inward.iter().all(|v| *v == inward[0]));
+    // An L's inside corner.
+    let l = json!([[0, 0], [10, 0], [10, 10]]);
+    let inside: Vec<_> = (0..3).map(|g| offset_with_gap(l.clone(), false, [8.0, 2.0], g).vertices).collect();
+    assert!(near(inside[0][1].p, 9.0, 1.0), "{:?}", inside[0]);
+    assert!(inside.iter().all(|v| *v == inside[0]));
+    // A line into a semicircle offset inside the turn (below the line, outside the semicircle):
+    // trimmed to the crossing whatever the gap type.
+    let la = json!([[0, -5], {"p": [10, 0], "bulge": 1}, [10, 10]]);
+    let arcs: Vec<_> = (0..3).map(|g| offset_with_gap(la.clone(), false, [8.0, -2.0], g).vertices).collect();
+    assert_eq!(arcs[0].len(), 3, "{:?}", arcs[0]);
+    assert!(arcs.iter().all(|v| *v == arcs[0]));
+}
+
+#[test]
+fn offset_gap_type_fills_line_to_arc_corners_too() {
+    // The same line and semicircle offset into the semicircle: the corner is on the outside of
+    // the turn there. Extend runs the line on to the smaller circle, Fillet rounds the corner
+    // about (10, 0), Chamfer cuts it; every copy stays at least 1 from the source.
+    let la = json!([[0, -5], {"p": [10, 0], "bulge": 1}, [10, 10]]);
+    let src = Polyline {
+        vertices: poly(&{
+            let mut s = Session::new();
+            let h = pline(&mut s, la.clone(), false);
+            kind(&s, &h)
+        })
+        .vertices,
+        closed: false,
+    };
+    let mut shapes = Vec::new();
+    for g in 0..3 {
+        let p = offset_with_gap(la.clone(), false, [12.0, 5.0], g);
+        let pl = Polyline { vertices: p.vertices.clone(), closed: false };
+        for q in pl.tessellate(1e-3) {
+            let d = src.closest(q).unwrap().dist(q);
+            assert!(d >= 1.0 - 1e-6, "gap {g}: {q:?} is {d} from the source");
+        }
+        // It still ends on the inner circle of radius 4 round (10, 5).
+        assert!(near(p.vertices.last().unwrap().p, 10.0, 9.0), "{:?}", p.vertices);
+        shapes.push(p.vertices);
+    }
+    assert!(shapes[0] != shapes[1] && shapes[1] != shapes[2], "{shapes:?}");
+}
+
+#[test]
+fn offset_lines_round_a_collapsed_arc_stay_joined() {
+    // Offset 1 towards the centre of the radius-0.5 arc collapses it; whatever the gap type the
+    // lines either side are joined round the arc's start vertex (the points 1 from the source).
+    let pts = json!([[-2, 0], {"p": [0, 0], "bulge": 1}, [0, -1], [1, -4]]);
+    let joined: Vec<_> = (0..3).map(|g| offset_with_gap(pts.clone(), false, [-0.3, -0.5], g).vertices).collect();
+    assert!(joined.iter().all(|v| *v == joined[0]), "{joined:?}");
+    let v = &joined[0];
+    assert_eq!(v.len(), 5, "{v:?}");
+    assert!(near(v[0].p, -2.0, 1.0) && near(v[1].p, 0.0, 1.0) && v[0].bulge == 0.0, "{v:?}");
+    // Round the arc's start vertex, then round its end vertex where the two circles cross.
+    for (i, (cx, cy)) in [(1, (0.0, 0.0)), (2, (0.0, -1.0))] {
+        let (arc, ccw) = cadcraft_geom::bulge_to_arc(v[i].p, v[i + 1].p, v[i].bulge).unwrap();
+        assert!(!ccw && near(arc.center, cx, cy) && (arc.radius - 1.0).abs() < 1e-9, "{arc:?}");
+    }
+    assert!(near(v[2].p, 3f64.sqrt() / 2.0, -0.5), "{v:?}");
+    // The last piece runs along the offset of the last line.
+    let dir = Vec2::new(1.0, -3.0).normalized();
+    let off = Vec2::new(0.0, -1.0) + dir.perp();
+    assert!((v[3].p - off).cross(dir).abs() < 1e-9 && (v[4].p - off).cross(dir).abs() < 1e-9 && v[3].bulge == 0.0, "{v:?}");
+}
+
+#[test]
+fn offset_echoes_the_gap_type() {
+    let mut s = Session::new();
+    s.execute("setvar", &json!({"name": "OFFSETGAPTYPE", "value": 1})).unwrap();
+    s.cmdline("offset").unwrap();
+    assert!(s.log.iter().any(|l| l.contains("OFFSETGAPTYPE=1")), "{:?}", s.log);
+}
+
+#[test]
+fn offset_rounded_rectangle_keeps_concentric_arcs() {
+    // A 12 × 8 rectangle with radius-2 corners, offset out by 1 and in by 1: radii 3 and 1, same
+    // centres, the same bulges.
+    let b = (std::f64::consts::PI / 8.0).tan();
+    let pts = json!([[2, 0], {"p": [10, 0], "bulge": b}, [12, 2], {"p": [12, 6], "bulge": b}, [10, 8], {"p": [2, 8], "bulge": b}, [0, 6], {"p": [0, 2], "bulge": b}]);
+    for (side, r) in [([20.0, 4.0], 3.0), ([6.0, 4.0], 1.0)] {
+        let mut s = Session::new();
+        let h = pline(&mut s, pts.clone(), true);
+        s.execute("offset", &json!({"handle": h, "distance": 1, "side": side})).unwrap();
+        let p = poly(&last(&s));
+        assert_eq!(p.vertices.len(), 8);
+        let centres = [(10.0, 2.0), (10.0, 6.0), (2.0, 6.0), (2.0, 2.0)];
+        for (i, v) in p.vertices.iter().enumerate().filter(|(_, v)| v.bulge != 0.0) {
+            assert!((v.bulge - b).abs() < 1e-12);
+            let (arc, _) = cadcraft_geom::bulge_to_arc(v.p, p.vertices[(i + 1) % 8].p, v.bulge).unwrap();
+            assert!((arc.radius - r).abs() < 1e-9 && centres.iter().any(|&(x, y)| near(arc.center, x, y)), "{arc:?}");
+        }
+    }
+}
+
+#[test]
+fn offset_splitting_polyline_makes_several_and_collapse_makes_none() {
+    let mut s = Session::new();
+    // Two 10 × 10 squares joined by a 1-wide neck: offset inward by 1 the neck closes.
+    let h = pline(
+        &mut s,
+        json!([[0, 0], [10, 0], [10, 4.5], [14, 4.5], [14, 0], [24, 0], [24, 10], [14, 10], [14, 5.5], [10, 5.5], [10, 10], [0, 10]]),
+        true,
+    );
+    let r = s.execute("offset", &json!({"handle": h, "distance": 1, "side": [5, 5]})).unwrap();
+    let hs = r["handles"].as_array().unwrap();
+    assert_eq!(hs.len(), 2, "{r}");
+    for x in hs {
+        let p = poly(&kind(&s, x.as_str().unwrap()));
+        assert!(p.closed && (area(&p).abs() - 64.0).abs() < 1e-9, "{p:?}");
+    }
+    // Past half the width a closed polyline has no offset: the command says so.
+    let sq = pline(&mut s, square(), true);
+    assert!(s.execute("offset", &json!({"handle": sq, "distance": 6, "side": [5, 5]})).is_err());
+    assert!(s.execute("offset", &json!({"handle": sq, "distance": 1, "side": [5, 5], "gapType": 7})).is_err());
+}
+
 #[test]
 fn offset_elliptical_arc_follows_picked_side() {
     let max_x = |side: Value| {
