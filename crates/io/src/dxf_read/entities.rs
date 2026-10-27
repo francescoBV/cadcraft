@@ -1,5 +1,5 @@
 use super::common::{T, common, ocs};
-use super::hatch::hatch;
+use super::hatch::{hatch, mpolygon, mpolygon_common};
 use super::text::{attdef, attrib_modes, attrib_props, mtext_from, multiline_attrib, split_embedded, text_from};
 use super::*;
 
@@ -117,7 +117,7 @@ pub(super) fn entity_with_table_budget(kind: &str, tags: &[Tag], table_cells_lef
         return None;
     }
     let t = T(tags);
-    let c = common(&t);
+    let c = if kind == "MPOLYGON" { mpolygon_common(tags) } else { common(&t) };
     let k = match kind {
         "LINE" => EntityKind::Line(Line { a: t.p(10), b: t.p(11) }),
         "POINT" => EntityKind::Point(Point { p: t.p(10), angle: t.fd(50, 0.0).to_radians() }),
@@ -211,8 +211,8 @@ pub(super) fn entity_with_table_budget(kind: &str, tags: &[Tag], table_cells_lef
         }
         "MLINE" => EntityKind::MLine(crate::dxf_mline::read_entity(tags)),
         "3DFACE" => EntityKind::Face3d(Face3d { corners: [t.p(10), t.p(11), t.p(12), t.p(13)], hidden_edges: t.i(70).unwrap_or(0) as u8 }),
-        "HATCH" => {
-            let mut k = hatch(tags, &t)?;
+        "HATCH" | "MPOLYGON" => {
+            let mut k = if kind == "MPOLYGON" { mpolygon(tags)? } else { hatch(tags, &t)? };
             if c.extrusion.z < 0.0
                 && let EntityKind::Hatch(h) = &mut k
             {

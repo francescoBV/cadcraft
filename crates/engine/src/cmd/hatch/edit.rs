@@ -405,6 +405,11 @@ pub(super) fn run_hatchedit(s: &mut Session, p: &Value) -> Result<Value> {
         Some(_) => return Err(bad("hatchedit", "`boundary` is an array of object handles")),
     };
     let associate = bool_or(p, "associate", false);
+    let to_mpolygon = match p.get("mpolygon") {
+        None | Some(Value::Null) => None,
+        Some(Value::Bool(b)) => Some(*b),
+        Some(_) => return Err(bad("hatchedit", "`mpolygon` is true (make MPOLYGONs) or false (make hatches)")),
+    };
     let mut created = Vec::new();
     let mut notes = Vec::new();
     let mut budget = MAX_LOOPS;
@@ -455,7 +460,40 @@ pub(super) fn run_hatchedit(s: &mut Session, p: &Value) -> Result<Value> {
             }
             created.extend(new);
         }
-        s.doc_mut()?.modify_entity(*handle, |e| e.kind = EntityKind::Hatch(h))?;
+        let (common, space) = {
+            let d = s.doc()?;
+            (d.entity(*handle).map(|e| e.common.clone()).unwrap_or_default(), d.space_of(*handle))
+        };
+        let mut color = None;
+        match (to_mpolygon, h.mpolygon.clone()) {
+            (Some(true), None) => super::mpoly::to_mpolygon(&mut h, common.color),
+            // Back to a hatch: filled in the MPOLYGON's fill colour, with its boundary drawn as
+            // polylines (in the MPOLYGON's own properties) the hatch is associated with.
+            (Some(false), Some(mp)) => {
+                h.mpolygon = None;
+                color = Some(mp.fill_color);
+                if let Some(space) = space {
+                    let d = s.doc_mut()?;
+                    for l in &mut h.loops {
+                        let b = d.add(&space, common.clone(), lwpoly(l.vertices.clone(), true))?;
+                        l.sources = vec![b];
+                        created.push(b);
+                    }
+                    h.associative = true;
+                }
+            }
+            _ => {}
+        }
+        // An MPOLYGON is never associative.
+        if h.mpolygon.is_some() {
+            detach(&mut h);
+        }
+        s.doc_mut()?.modify_entity(*handle, |e| {
+            e.kind = EntityKind::Hatch(h);
+            if let Some(c) = color {
+                e.common.color = c;
+            }
+        })?;
         if bool_or(p, "separate", false) {
             created.extend(separate(s, *handle)?);
         }

@@ -87,6 +87,7 @@ fn hatch_pattern_and_solid() {
         origin: Vec2::ZERO,
         background: None,
         pattern_lines: Vec::new(),
+        mpolygon: None,
     };
     d.add(&Space::Model, Common::default(), EntityKind::Hatch(h.clone())).unwrap();
     let l = build(&d, &Space::Model, &Options::default());
@@ -454,6 +455,7 @@ fn pattern_hatch(pattern: &str, scale: f64, (x0, y0, x1, y1): (f64, f64, f64, f6
         origin: Vec2::ZERO,
         background: None,
         pattern_lines: Vec::new(),
+        mpolygon: None,
     }
 }
 

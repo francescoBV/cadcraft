@@ -493,6 +493,7 @@ pub(super) fn entity(w: &mut W, d: &Drawing, e: &Entity, owner: &str, paper: boo
             w.p(13, f.corners[3]);
             w.i(70, i64::from(f.hidden_edges));
         }
+        EntityKind::Hatch(h) if h.mpolygon.is_some() => mpolygon(w, d, e, h, owner, paper),
         EntityKind::Hatch(h) => {
             w.s(0, "HATCH");
             common(w, e, owner, paper, "AcDbHatch");
@@ -527,30 +528,7 @@ pub(super) fn entity(w: &mut W, d: &Drawing, e: &Entity, owner: &str, paper: boo
             w.i(75, i64::from(h.style));
             w.i(76, 1);
             if !h.solid {
-                w.f(52, h.angle.to_degrees());
-                w.f(41, h.scale);
-                w.i(77, 0);
-                // The lines read from the file, else the library's pattern of that name.
-                let lines = if h.pattern_lines.is_empty() {
-                    cadcraft_doc::library::pattern_for(d, &h.pattern).map(|p| p.lines).unwrap_or_default()
-                } else {
-                    h.pattern_lines.clone()
-                };
-                w.i(78, lines.len() as i64);
-                for pl in lines {
-                    let ang = pl.angle.to_radians() + h.angle;
-                    w.f(53, ang.to_degrees());
-                    let o = h.origin + Vec2::new(pl.origin.0, pl.origin.1).rotate(h.angle) * h.scale;
-                    w.f(43, o.x);
-                    w.f(44, o.y);
-                    let dl = Vec2::new(pl.delta.0, pl.delta.1).rotate(ang) * h.scale;
-                    w.f(45, dl.x);
-                    w.f(46, dl.y);
-                    w.i(79, pl.dashes.len() as i64);
-                    for dsh in pl.dashes {
-                        w.f(49, dsh * h.scale);
-                    }
-                }
+                pattern_definition(w, d, h);
             }
             w.i(98, 0);
             if let Some(g) = &h.gradient {
@@ -640,6 +618,79 @@ pub(super) fn entity(w: &mut W, d: &Drawing, e: &Entity, owner: &str, paper: boo
         // Entity types CADCraft doesn't model aren't written; the save command reports them.
         EntityKind::Unknown(_) => {}
     }
+}
+
+/// A hatch's pattern (groups 52 angle, 41 scale, 77 double, 78 line count, then each line's 53
+/// angle, 43/44 base point, 45/46 offset, 79 dash count and 49 dashes), as drawn: the lines read
+/// from the file, else the library's pattern of that name.
+fn pattern_definition(w: &mut W, d: &Drawing, h: &Hatch) {
+    w.f(52, h.angle.to_degrees());
+    w.f(41, h.scale);
+    w.i(77, 0);
+    let lines = if h.pattern_lines.is_empty() {
+        cadcraft_doc::library::pattern_for(d, &h.pattern).map(|p| p.lines).unwrap_or_default()
+    } else {
+        h.pattern_lines.clone()
+    };
+    w.i(78, lines.len() as i64);
+    for pl in lines {
+        let ang = pl.angle.to_radians() + h.angle;
+        w.f(53, ang.to_degrees());
+        let o = h.origin + Vec2::new(pl.origin.0, pl.origin.1).rotate(h.angle) * h.scale;
+        w.f(43, o.x);
+        w.f(44, o.y);
+        let dl = Vec2::new(pl.delta.0, pl.delta.1).rotate(ang) * h.scale;
+        w.f(45, dl.x);
+        w.f(46, dl.y);
+        w.i(79, pl.dashes.len() as i64);
+        for dsh in pl.dashes {
+            w.f(49, dsh * h.scale);
+        }
+    }
+}
+
+/// An MPOLYGON (DXF Reference): its record `AcDbMPolygon` holds a version (70 = 1), the
+/// elevation and extrusion, the pattern name and solid-fill flag, the boundary loops (as
+/// polylines, as HATCH's), the island style and pattern, then the fill colour (62), the
+/// pattern's X direction (11/21) and no degenerate loops (99 = 0). Origin and background go in
+/// `CADCRAFT` xdata as for a hatch.
+fn mpolygon(w: &mut W, d: &Drawing, e: &Entity, h: &Hatch, owner: &str, paper: bool) {
+    let mp = h.mpolygon.clone().unwrap_or_default();
+    w.s(0, "MPOLYGON");
+    common(w, e, owner, paper, "AcDbMPolygon");
+    w.i(70, 1);
+    w.p(10, Vec3::new(0.0, 0.0, h.elevation));
+    w.p(210, Vec3::Z);
+    w.s(2, &h.pattern);
+    w.i(70, i64::from(h.solid));
+    w.i(91, h.loops.len() as i64);
+    for l in &h.loops {
+        w.i(92, 2 | if l.outer { 1 } else { 0 });
+        let has_bulge = l.vertices.iter().any(|v| v.bulge != 0.0);
+        w.i(72, i64::from(has_bulge));
+        w.i(73, 1);
+        w.i(93, l.vertices.len() as i64);
+        for v in &l.vertices {
+            w.p2(10, v.p);
+            if has_bulge {
+                w.f(42, v.bulge);
+            }
+        }
+    }
+    w.i(75, i64::from(h.style));
+    w.i(76, 1);
+    if !h.solid {
+        pattern_definition(w, d, h);
+    }
+    w.i(62, i64::from(mp.fill_color.to_aci()));
+    let x = if mp.x_dir.is_finite() && mp.x_dir.len() > 1e-12 { mp.x_dir } else { Vec2::X };
+    w.f(11, x.x);
+    w.f(21, x.y);
+    w.i(99, 0);
+    if let Some(g) = &h.gradient {
+        gradient(w, g);
+    }
+    hatch_xdata(w, h);
 }
 
 /// A multileader for a file older than 2007 (no MULTILEADER): a LEADER per leader line, ending

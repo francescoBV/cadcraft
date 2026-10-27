@@ -121,6 +121,7 @@ fn sample() -> Drawing {
             origin: Vec2::ZERO,
             background: None,
             pattern_lines: Vec::new(),
+            mpolygon: None,
         }),
     )
     .unwrap();
@@ -1867,6 +1868,7 @@ fn gradient_sample() -> (Drawing, Vec<Option<Gradient>>) {
             origin: Vec2::ZERO,
             background: None,
             pattern_lines: Vec::new(),
+            mpolygon: None,
         };
         d.add(&Space::Model, Common::default(), EntityKind::Hatch(h)).unwrap();
     }

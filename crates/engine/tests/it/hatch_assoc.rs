@@ -176,6 +176,7 @@ fn hostile_sources_never_panic() {
         origin: Vec2::ZERO,
         background: None,
         pattern_lines: Vec::new(),
+        mpolygon: None,
     });
     s.add_entity(k).unwrap();
     s.execute("move", &json!({ "handles": [r], "delta": [1, 1] })).unwrap();

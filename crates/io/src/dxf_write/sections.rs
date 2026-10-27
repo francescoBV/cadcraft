@@ -257,6 +257,9 @@ pub(super) fn tags_for(d: &Drawing, version: Version, target: Version) -> Vec<Ta
     if every.iter().any(|e| matches!(e.kind, EntityKind::Wipeout(_))) {
         classes.push(("WIPEOUT", "AcDbWipeout", 127, true));
     }
+    if every.iter().any(|e| matches!(&e.kind, EntityKind::Hatch(h) if h.mpolygon.is_some())) {
+        classes.push(("MPOLYGON", "AcDbMPolygon", 127, true));
+    }
     if !cx.images.is_empty() {
         classes.push(("IMAGE", "AcDbRasterImage", 127, true));
         classes.push(("IMAGEDEF", "AcDbRasterImageDef", 0, false));

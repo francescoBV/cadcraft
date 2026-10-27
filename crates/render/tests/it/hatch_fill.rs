@@ -26,6 +26,7 @@ fn hatch(pattern: &str, loops: Vec<HatchLoop>) -> Hatch {
         origin: Vec2::ZERO,
         background: None,
         pattern_lines: Vec::new(),
+        mpolygon: None,
     }
 }
 

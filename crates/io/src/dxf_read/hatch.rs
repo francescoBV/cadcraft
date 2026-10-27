@@ -1,4 +1,4 @@
-use super::common::T;
+use super::common::{T, common};
 use super::*;
 
 pub(super) fn hatch(tags: &[Tag], t: &T) -> Option<EntityKind> {
@@ -216,7 +216,67 @@ pub(super) fn hatch(tags: &[Tag], t: &T) -> Option<EntityKind> {
         origin,
         background,
         pattern_lines,
+        mpolygon: None,
     }))
+}
+
+/// Where an MPOLYGON's own record (`100 AcDbMPolygon`) starts; 0 when the marker is missing.
+fn mpolygon_start(tags: &[Tag]) -> usize {
+    tags.iter().position(|x| x.code == 100 && matches!(&x.value, cadcraft_dxf::Value::Str(s) if s == "AcDbMPolygon")).unwrap_or(0)
+}
+
+/// An MPOLYGON's common properties: its own record has a 62 too (the fill colour), so they
+/// are read from the groups before it; the extrusion (210) is in the record.
+pub(super) fn mpolygon_common(tags: &[Tag]) -> Common {
+    let at = mpolygon_start(tags);
+    let mut c = common(&T(tags.get(..at).unwrap_or(&[])));
+    let own = T(tags.get(at..).unwrap_or(&[]));
+    c.extrusion = Vec3::new(own.fd(210, 0.0), own.fd(220, 0.0), own.fd(230, 1.0));
+    c
+}
+
+/// MPOLYGON (DXF Reference): the boundary loops and pattern as HATCH has them, in the record
+/// `AcDbMPolygon` (a version 70 may come before the solid-fill 70), then 62 the fill colour
+/// and 11/21 the pattern's X direction. An MPOLYGON is never associative.
+pub(super) fn mpolygon(tags: &[Tag]) -> Option<EntityKind> {
+    let own = tags.get(mpolygon_start(tags)..).unwrap_or(&[]);
+    let EntityKind::Hatch(mut h) = hatch(own, &T(own))? else { return None };
+    let loops_at = own.iter().position(|x| x.code == 91).unwrap_or(own.len());
+    let solid_flag = own.iter().take(loops_at).rfind(|x| x.code == 70).map(Tag::i64);
+    h.solid = solid_flag == Some(1) || h.pattern.eq_ignore_ascii_case("SOLID");
+    if h.solid {
+        h.pattern_lines.clear();
+    } else if h.pattern_lines.is_empty() {
+        h.pattern_lines = pattern_definition(own, h.scale, h.angle, h.origin);
+    }
+    h.associative = false;
+    h.loops.iter_mut().for_each(|l| l.sources.clear());
+    mark_outer_loops(&mut h.loops);
+    let fill_color = own.iter().find(|x| x.code == 62).map_or(Color::ByLayer, |x| Color::from_aci(i16::try_from(x.i64()).unwrap_or(256)));
+    // The X direction follows the pattern data (an 11 earlier on is a boundary edge's end).
+    let after = own.iter().rposition(|x| x.code == 76).unwrap_or(loops_at);
+    let tail = T(own.get(after..).unwrap_or(&[]));
+    let x_dir = Vec2::new(tail.fd(11, 1.0), tail.fd(21, 0.0));
+    h.mpolygon = Some(cadcraft_doc::MPolygon { fill_color, x_dir: if x_dir.is_finite() { x_dir } else { Vec2::X } });
+    Some(EntityKind::Hatch(h))
+}
+
+/// Upper bound on the loops whose nesting [`mark_outer_loops`] works out (pairs compared grow
+/// with the square).
+const MAX_NESTED_LOOPS: usize = 2000;
+
+/// When no loop is flagged outer (an MPOLYGON from a DWG, whose loops carry no flags), a loop is
+/// outer when it lies inside an even number of the others.
+fn mark_outer_loops(loops: &mut [HatchLoop]) {
+    if loops.iter().any(|l| l.outer) || loops.len() > MAX_NESTED_LOOPS {
+        return;
+    }
+    let rings: Vec<Vec<Vec2>> = loops.iter().map(|l| l.vertices.iter().map(|v| v.p).collect()).collect();
+    for (i, l) in loops.iter_mut().enumerate() {
+        let Some(p) = rings.get(i).and_then(|r| r.first()).copied().filter(|p| p.is_finite()) else { continue };
+        let depth = rings.iter().enumerate().filter(|(j, r)| *j != i && r.len() > 2 && cadcraft_geom::point_in_polygon(r, p)).count();
+        l.outer = depth % 2 == 0;
+    }
 }
 
 /// Upper bound on the source boundary objects of one HATCH loop.

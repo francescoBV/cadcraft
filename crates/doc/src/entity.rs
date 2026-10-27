@@ -49,7 +49,7 @@ pub use block::{Attrib, AttribModes, AttribProps, Insert, MultilineAttrib, mtext
 pub use common::{Common, Handle, Lineweight, RawTag, Transparency};
 pub use curves::{Arc, Circle, Ellipse, Face3d, Line, LwPolyline, Point, Polyline3d, RayLine, Solid};
 pub use dim::{AssocSnap, DimAssoc, DimBreak, DimKind, DimMarks, Dimension, Inspection, JoggedRadius, Leader, MLeader};
-pub use fill::{Gradient, Hatch, HatchLoop, Wipeout};
+pub use fill::{Gradient, Hatch, HatchLoop, MPolygon, Wipeout};
 pub use layout::{Image, Table, TableCell, Viewport};
 pub use text::{HAlign, MText, MTextColumnType, MTextColumns, Text, VAlign};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -134,6 +134,7 @@ impl EntityKind {
             EntityKind::MLine(_) => "MLine",
             EntityKind::Leader(_) => "Leader",
             EntityKind::MLeader(_) => "Multileader",
+            EntityKind::Hatch(h) if h.mpolygon.is_some() => "MPolygon",
             EntityKind::Hatch(_) => "Hatch",
             EntityKind::Solid(_) => "2D Solid",
             EntityKind::Trace(_) => "Trace",
@@ -169,6 +170,7 @@ impl EntityKind {
             EntityKind::MLine(_) => "MLINE",
             EntityKind::Leader(_) => "LEADER",
             EntityKind::MLeader(_) => "MULTILEADER",
+            EntityKind::Hatch(h) if h.mpolygon.is_some() => "MPOLYGON",
             EntityKind::Hatch(_) => "HATCH",
             EntityKind::Solid(_) => "SOLID",
             EntityKind::Trace(_) => "TRACE",

@@ -5,7 +5,7 @@ pub use patfile::{PatternChoice, pattern_choices};
 pub(super) use patfile::{lines_for, run_patterns};
 
 use cadcraft_color::Color;
-use cadcraft_doc::{Drawing, Entity, EntityKind, Gradient, Handle, Hatch, HatchLoop, Space, entity_bounds};
+use cadcraft_doc::{Drawing, Entity, EntityKind, Gradient, Handle, Hatch, HatchLoop, MPolygon, Space, entity_bounds};
 use cadcraft_geom::{Bounds2, PolyVertex, Polyline, Vec2, point_in_polygon};
 use serde_json::{Value, json};
 
@@ -16,6 +16,7 @@ use crate::{Accept, EngineError, Input, Interactive, Picker, Prompt, Result, Ses
 
 mod assoc;
 mod edit;
+mod mpoly;
 mod pick;
 use super::has_doc;
 pub(crate) use assoc::update as refill_associative;
@@ -27,12 +28,13 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("gradient", "Gradient...", run_gradient).menu(&["Draw", "Gradient..."]).alias(&["gd"]).params("{points? and/or handles?, name?: \"LINEAR\"|\"CYLINDER\"|\"CURVED\"|\"SPHERICAL\"|\"HEMISPHERICAL\" or INV… (colours swapped), color1?, color2?, angle? (degrees), centered? (default true)}").interactive(|s| Ok(Box::new(HatchM::new(s, true)))),
         CommandSpec::new("boundary", "Boundary...", run_boundary).menu(&["Draw", "Boundary..."]).alias(&["bo", "bpoly"]).params("{points: [[x,y]]}").interactive(|_| Ok(Box::new(BoundaryM { region: false }))),
         CommandSpec::new("region", "Region", run_region).menu(&["Draw", "Region"]).alias(&["reg"]).params("{handles?}"),
-        CommandSpec::new("hatchedit", "Hatch Edit", edit::run_hatchedit).menu(&["Modify", "Object", "Hatch..."]).alias(&["he", "-hatchedit"]).params("{handles?, pattern?, scale?, angle?, gradient?: {name?, color1?, color2?, angle? (degrees), centered?} (makes or changes a gradient fill; `pattern` turns it back), associative?: bool (false unlinks; true links each loop to a closed object of the same shape, or to `boundary` objects), boundary?: [hex], addPoints?: [[x,y]], addBoundary?: [hex], removeLoops?: [zero-based index] (geometry edits require one hatch), style?, origin? | originMode?, separate?: true, recreate?: \"polyline\"|\"region\", associate?: bool (link to the recreated boundary)}").interactive(|s| Ok(Box::new(edit::HatchEditM::new(s)))),
+        CommandSpec::new("hatchedit", "Hatch Edit", edit::run_hatchedit).menu(&["Modify", "Object", "Hatch..."]).alias(&["he", "-hatchedit"]).params("{handles?, pattern?, scale?, angle?, gradient?: {name?, color1?, color2?, angle? (degrees), centered?} (makes or changes a gradient fill; `pattern` turns it back), associative?: bool (false unlinks; true links each loop to a closed object of the same shape, or to `boundary` objects), boundary?: [hex], addPoints?: [[x,y]], addBoundary?: [hex], removeLoops?: [zero-based index] (geometry edits require one hatch), style?, origin? | originMode?, separate?: true, recreate?: \"polyline\"|\"region\", associate?: bool (link to the recreated boundary), mpolygon?: bool (true: make MPOLYGONs; false: make MPOLYGONs hatches with their boundary as polylines)}").interactive(|s| Ok(Box::new(edit::HatchEditM::new(s)))),
         CommandSpec::new("hatchpick", "Hatch Pick", pick::run_hatchpick)
             .params("{points?: [[x,y]] (internal points), handles?: [hex] (closed objects)} (typed: Points, Objects, oRigin or Hatch, then the picks): the Hatch and Gradient dialog's picks, kept in the session; changes nothing")
             .enabled(has_doc)
             .noundo()
             .interactive(|_| Ok(Box::new(pick::HatchPickM::default()))),
+        mpoly::spec(),
     ]
 }
 
@@ -291,6 +293,8 @@ struct HatchSettings {
     origin: Vec2,
     origin_mode: OriginMode,
     style: u8,
+    /// MPOLYGON makes these instead of hatches.
+    mpolygon: Option<MPolygon>,
 }
 
 impl HatchSettings {
@@ -328,10 +332,11 @@ impl HatchSettings {
             style: str_param(p, "style")
                 .and_then(island_style)
                 .unwrap_or_else(|| s.doc().map_or(0, |d| d.header.i64("HPISLANDDETECTION", 0).clamp(0, 2) as u8)),
+            mpolygon: None,
         }
     }
     fn hatch(&self, mut loops: Vec<HatchLoop>) -> EntityKind {
-        if !self.associative {
+        if !self.associative || self.mpolygon.is_some() {
             loops.iter_mut().for_each(|l| l.sources.clear());
         }
         let solid = self.gradient.is_some() || self.pattern == "SOLID";
@@ -342,12 +347,13 @@ impl HatchSettings {
             loops,
             scale: self.scale,
             angle: self.angle,
-            associative: self.associative,
+            associative: self.associative && self.mpolygon.is_none(),
             style: self.style,
             elevation: 0.0,
             gradient: self.gradient.clone(),
             background: None,
             pattern_lines: patfile::lines_for(&self.pattern),
+            mpolygon: self.mpolygon.clone(),
         })
     }
 }
@@ -569,7 +575,14 @@ impl HatchM {
         s.last_used.hatch_select = selecting;
     }
     fn finish(&mut self, s: &mut Session) -> Result<Step> {
-        add_hatches(s, &self.settings, std::mem::take(&mut self.loops))?;
+        let mut groups = std::mem::take(&mut self.loops);
+        let mut st = self.settings.clone();
+        // An MPOLYGON is one entity with every loop picked.
+        if st.mpolygon.is_some() {
+            st.separate = false;
+            groups = vec![groups.into_iter().flatten().collect()];
+        }
+        add_hatches(s, &st, groups)?;
         Ok(Step::Done)
     }
     fn set_origin(&mut self, s: &mut Session, origin: Option<Vec2>, mode: OriginMode) -> Result<()> {
@@ -628,7 +641,11 @@ impl HatchM {
 
 impl Interactive for HatchM {
     fn name(&self) -> &'static str {
-        if self.gradient { "GRADIENT" } else { "HATCH" }
+        match (self.settings.mpolygon.is_some(), self.gradient) {
+            (true, _) => "MPOLYGON",
+            (false, true) => "GRADIENT",
+            (false, false) => "HATCH",
+        }
     }
     fn begin(&mut self, s: &mut Session) -> Result<Step> {
         s.echo(format!(

@@ -25,6 +25,7 @@ fn hatch(pattern: &str, scale: f64, angle: f64, origin: Vec2, lines: Vec<Pattern
         origin,
         background: None,
         pattern_lines: lines,
+        mpolygon: None,
     }
 }
 

@@ -73,6 +73,7 @@ mod mleader_remember;
 mod mline;
 mod mocoro;
 mod modify_curves;
+mod mpolygon;
 mod mtext_columns;
 mod mtext_options;
 mod multiline_attributes;

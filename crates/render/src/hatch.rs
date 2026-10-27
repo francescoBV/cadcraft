@@ -26,6 +26,26 @@ pub(super) fn draw(b: &mut Builder, ctx: &Ctx, e: &Entity, h: &Hatch, rgb: Ink, 
     // Gradient and background colours given ByLayer follow the hatch's own layer.
     let layer = if e.common.layer == "0" { ctx.block_layer.as_deref().unwrap_or("0") } else { e.common.layer.as_str() };
     let layer_color = ctx.layer_color(layer).unwrap_or(Color::Index(7));
+    // An MPOLYGON fills in its own colour and draws its boundary in the entity's.
+    let Some(mp) = &h.mpolygon else { return paint_fill(b, ctx, h, &loops, layer_color, rgb, lw) };
+    let fill_ink = match mp.fill_color {
+        Color::ByLayer => ink(layer_color, layer_color, ctx.block_color),
+        c => ink(c, layer_color, ctx.block_color),
+    };
+    paint_fill(b, ctx, h, &loops, layer_color, fill_ink, lw);
+    for l in &h.loops {
+        let mut pts = Polyline { vertices: l.vertices.clone(), closed: true }.tessellate(tol);
+        if let Some(first) = pts.first().copied() {
+            pts.push(first);
+        }
+        if pts.len() > 2 {
+            b.polyline(ctx, rgb, lw, &pts);
+        }
+    }
+}
+
+/// The fill of a hatch: solid, gradient or background, then its pattern lines in `rgb`.
+fn paint_fill(b: &mut Builder, ctx: &Ctx, h: &Hatch, loops: &[Vec<Vec2>], layer_color: Color, rgb: Ink, lw: f32) {
     // Level of detail: a pixel in the hatch's own units, along its most stretched axis (so lines
     // that show apart in any direction are never merged); 0 = full detail.
     let stretch = max_scale(&ctx.xf);
@@ -33,7 +53,7 @@ pub(super) fn draw(b: &mut Builder, ctx: &Ctx, e: &Entity, h: &Hatch, rgb: Ink, 
     let dense = b.opts.fill && reads_solid(ctx.d, h, px);
     if h.solid || h.pattern.eq_ignore_ascii_case("SOLID") || h.gradient.is_some() || dense {
         if b.opts.fill {
-            let tris = fill::triangulate_evenodd(&loops);
+            let tris = fill::triangulate_evenodd(loops);
             match &h.gradient {
                 Some(g) => gradient(b, ctx, g, layer_color, &tris),
                 None => b.tris(ctx, rgb, &tris),
@@ -44,14 +64,14 @@ pub(super) fn draw(b: &mut Builder, ctx: &Ctx, e: &Entity, h: &Hatch, rgb: Ink, 
     if let Some(bg) = h.background
         && b.opts.fill
     {
-        b.tris(ctx, ink(bg, layer_color, ctx.block_color), &fill::triangulate_evenodd(&loops));
+        b.tris(ctx, ink(bg, layer_color, ctx.block_color), &fill::triangulate_evenodd(loops));
     }
     // The area being looked at, in the hatch's units.
     let view = b.opts.view.and_then(|v| {
         let inv = ctx.xf.inverse()?;
         Some(Bounds2::from_points(v.corners().iter().map(|p| inv.apply(*p))))
     });
-    for seg in pattern_lines_until(ctx.d, h, &loops, px, view.as_ref(), b.opts.cancel.as_deref()) {
+    for seg in pattern_lines_until(ctx.d, h, loops, px, view.as_ref(), b.opts.cancel.as_deref()) {
         if seg.len() == 1 {
             if let Some(p) = seg.first() {
                 b.point(ctx, rgb, *p);
@@ -439,6 +459,7 @@ pub fn pattern_swatch(lines: &[PatternLine], side: f64) -> Vec<Vec<Vec2>> {
         origin: Vec2::ZERO,
         background: None,
         pattern_lines: lines.to_vec(),
+        mpolygon: None,
     };
     let square = vec![Vec2::new(0.0, 0.0), Vec2::new(side, 0.0), Vec2::new(side, side), Vec2::new(0.0, side)];
     let mut runs = pattern_lines(&Drawing::default(), &h, &[square], 0.0, None);
@@ -609,6 +630,7 @@ mod tests {
             gradient: None,
             background: None,
             pattern_lines: vec![],
+            mpolygon: None,
         };
         let loops = fill_loops(&hatch, 1e-4);
         assert_eq!(loops.len(), 1, "fill_loops must deduplicate duplicate loops");

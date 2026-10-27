@@ -41,6 +41,28 @@ pub struct Hatch {
     /// standard library (unit scale and angle, like the library's; empty otherwise).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pattern_lines: Vec<crate::library::PatternLine>,
+    /// Set for an MPOLYGON: a hatch that draws its own boundary (its loops, in the entity's
+    /// colour) and fills in a colour of its own. It is never associative.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mpolygon: Option<MPolygon>,
+}
+
+/// What an MPOLYGON adds to a hatch (DXF Reference, MPOLYGON: the fill colour and the pattern's
+/// X direction of its `AcDbMPolygon` record).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MPolygon {
+    /// The fill's colour (pattern lines or solid fill); ByLayer follows the entity's layer.
+    pub fill_color: Color,
+    /// The pattern's X direction as a file gave it (kept for the round trip).
+    #[serde(default)]
+    pub x_dir: Vec2,
+}
+
+impl Default for MPolygon {
+    fn default() -> Self {
+        MPolygon { fill_color: Color::ByLayer, x_dir: Vec2::X }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

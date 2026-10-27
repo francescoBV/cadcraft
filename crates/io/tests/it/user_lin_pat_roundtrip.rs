@@ -29,6 +29,7 @@ fn user_linetypes_and_patterns_survive_dxf() {
         origin: Vec2::ZERO,
         background: None,
         pattern_lines: steps.lines.clone(),
+        mpolygon: None,
     };
     d.add(&Space::Model, Common::default(), EntityKind::Hatch(h)).unwrap();
 

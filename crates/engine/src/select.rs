@@ -565,6 +565,7 @@ mod hatch_pattern_pick_tests {
             origin: Vec2::ZERO,
             background: None,
             pattern_lines: Vec::new(),
+            mpolygon: None,
         };
         d.add(&Space::Model, Common::default(), EntityKind::Hatch(hatch)).unwrap();
         d
@@ -603,6 +604,7 @@ mod hatch_pattern_pick_tests {
             origin: Vec2::ZERO,
             background: None,
             pattern_lines: Vec::new(),
+            mpolygon: None,
         };
         d.add(&Space::Model, Common::default(), EntityKind::Hatch(hatch)).unwrap();
         d
