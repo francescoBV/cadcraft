@@ -1,5 +1,5 @@
 //! Style and settings dialogs opened from the menus: Linetype Manager, Point Style, Text Style,
-//! Table Style, Multileader Style, Page Setup Manager, Plot and Constraint Settings.
+//! Table Style, Multileader Style, Dimension Style, Page Setup Manager, Plot and Constraint Settings.
 //!
 //! Typed or chosen from a menu (no parameters) these commands open their dialog; JSON calls run
 //! the command. The dialogs read the drawing and change it only through the same commands
@@ -16,6 +16,8 @@ use crate::theme::Tokens;
 
 /// The Block Attribute Manager (BATTMAN).
 mod battman;
+/// The Dimension Style Manager (DIMSTYLE).
+mod dimstyle;
 
 /// Open the dialog for a typed or menu-invoked command. `None` if `id` has no dialog here or the
 /// call carries parameters.
@@ -30,6 +32,7 @@ pub fn route(app: &mut CadApp, id: &str, params: &Value) -> Option<Result<Value,
         "style" | "st" => "textstyle",
         "tablestyle" | "ts" => "tablestyle",
         "mleaderstyle" | "mls" => "mleaderstyle",
+        "dimstyle" | "dimstyle.dimension" | "d" | "dst" | "ddim" | "dimsty" => "dimstyle",
         "pagesetup" => "pagesetup",
         "constraintsettings" | "csettings" => "csettings",
         "plot" | "print" => {
@@ -51,6 +54,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, name: &str, open: &mut bool
         "textstyle" => text_style(app, ctx, open),
         "tablestyle" => table_style(app, ctx, open),
         "mleaderstyle" => mleader_style(app, ctx, open),
+        "dimstyle" => dimstyle::dialog(app, ctx, open),
         "pagesetup" => page_setup(app, ctx, open),
         "csettings" => constraint_settings(app, ctx, open),
         "plot" => plot(app, ctx, open),

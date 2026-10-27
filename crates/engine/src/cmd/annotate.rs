@@ -1,7 +1,8 @@
 //! Dimensions and leaders: DIMLINEAR, DIMALIGNED, DIMRADIUS, DIMDIAMETER, DIMANGULAR, DIMARC,
 //! DIMORDINATE, DIMCONTINUE, DIMBASELINE, QDIM, DIM (smart), MLEADER, LEADER, DIMOVERRIDE,
 //! DIMREASSOCIATE / DIMDISASSOCIATE, DIMTEDIT, DIMSPACE; DIMEDIT, DIMJOGGED, DIMJOGLINE,
-//! DIMBREAK and DIMINSPECT in `annotate_dimedit.rs`.
+//! DIMBREAK and DIMINSPECT in `annotate_dimedit.rs`; `dimstyle.overrides` in
+//! `annotate_dimstyle.rs`.
 
 use cadcraft_doc::{AssocSnap, DimAssoc, DimKind, Dimension, EntityKind, Handle, MLeader, MText, Prim};
 use cadcraft_geom::{Segment, Vec2, Vec3};
@@ -128,6 +129,7 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
     .into_iter()
     .chain(dimedit::specs())
+    .chain(dimstyle_overrides::specs())
     .collect()
 }
 
@@ -140,6 +142,10 @@ mod tedit;
 
 #[path = "annotate_dimedit.rs"]
 mod dimedit;
+
+#[path = "annotate_dimstyle.rs"]
+mod dimstyle_overrides;
+pub(super) use dimstyle_overrides::regen_dims;
 
 #[cfg(test)]
 mod tests;

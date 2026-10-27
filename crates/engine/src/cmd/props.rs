@@ -832,6 +832,8 @@ fn run_dimstyle(s: &mut Session, p: &Value) -> Result<Value> {
             src.iter().filter(|(k, _)| !matches!(k.as_str(), "name" | "current")).map(|(k, v)| (k.clone(), v.clone())).collect();
         rejected = st.apply_fields(&fields);
     }
+    // Dimensions of the style that a file gave a `*D` block redraw with the new settings.
+    super::annotate::regen_dims(d, |dm| dm.style.eq_ignore_ascii_case(&name))?;
     if bool_or(p, "current", true) {
         d.header.set_str("DIMSTYLE", &name);
     }
