@@ -16,6 +16,10 @@ struct Row {
     default: String,
     invisible: bool,
     constant: bool,
+    verify: bool,
+    preset: bool,
+    lock: bool,
+    multiline: bool,
     height: f64,
     layer: String,
 }
@@ -77,6 +81,10 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Option<
                         default: a.text.value.clone(),
                         invisible: a.invisible,
                         constant: a.constant,
+                        verify: a.modes.verify,
+                        preset: a.modes.preset,
+                        lock: a.modes.lock_position,
+                        multiline: a.multiline.is_some(),
                         height: a.text.height,
                         layer: e.common.layer.clone(),
                     }),
@@ -102,8 +110,8 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Option<
             return;
         }
         ui.horizontal(|ui| {
-            ui.label("Block:");
-            craft_ui::ComboBox::from_id_salt("battman_blocks").selected_text(block.as_str()).width(180.0).show_ui(ui, |ui| {
+            let label = ui.label("Block:");
+            let combo = craft_ui::ComboBox::from_id_salt("battman_blocks").selected_text(block.as_str()).width(180.0).show_ui(ui, |ui| {
                 for b in &blocks {
                     if ui.selectable_label(*b == block, b).clicked() {
                         block = b.clone();
@@ -111,6 +119,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Option<
                     }
                 }
             });
+            combo.response.labelled_by(label.id);
             ui.label(RichText::new(format!("Found in drawing: {refs}")).color(t.text_dim));
         });
         ui.separator();
@@ -127,7 +136,11 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Option<
                         }
                         ui.label(&r.prompt);
                         ui.label(&r.default);
-                        let modes = [(r.invisible, "I"), (r.constant, "C")].iter().filter(|(on, _)| *on).map(|(_, m)| *m).collect::<String>();
+                        let modes = [(r.invisible, "I"), (r.constant, "C"), (r.verify, "V"), (r.preset, "P"), (r.lock, "L"), (r.multiline, "M")]
+                            .iter()
+                            .filter(|(on, _)| *on)
+                            .map(|(_, m)| *m)
+                            .collect::<String>();
                         ui.label(RichText::new(modes).color(t.text_dim));
                         ui.end_row();
                     }
@@ -172,14 +185,27 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Option<
                 }
                 ui.end_row();
                 ui.label("Mode");
-                ui.horizontal(|ui| {
-                    let (mut inv, mut con) = (r.invisible, r.constant);
-                    if ui.checkbox(&mut inv, "Invisible").changed() {
-                        action = act(edit("invisible", json!(inv)), apply);
-                    }
-                    if ui.checkbox(&mut con, "Constant").changed() {
-                        action = act(edit("constant", json!(con)), apply);
-                    }
+                ui.vertical(|ui| {
+                    ui.horizontal(|ui| {
+                        for (key, on, label) in
+                            [("invisible", r.invisible, "Invisible"), ("constant", r.constant, "Constant"), ("verify", r.verify, "Verify")]
+                        {
+                            let mut v = on;
+                            if ui.checkbox(&mut v, label).changed() {
+                                action = act(edit(key, json!(v)), apply);
+                            }
+                        }
+                    });
+                    ui.horizontal(|ui| {
+                        for (key, on, label) in
+                            [("preset", r.preset, "Preset"), ("lockPosition", r.lock, "Lock position"), ("multiline", r.multiline, "Multiple lines")]
+                        {
+                            let mut v = on;
+                            if ui.checkbox(&mut v, label).changed() {
+                                action = act(edit(key, json!(v)), apply);
+                            }
+                        }
+                    });
                 });
                 ui.end_row();
                 let label = ui.label("Height");
@@ -188,14 +214,15 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Option<
                     action = act(edit("height", json!(h)), apply);
                 }
                 ui.end_row();
-                ui.label("Layer");
-                craft_ui::ComboBox::from_id_salt("battman_layer").selected_text(r.layer.as_str()).show_ui(ui, |ui| {
+                let label = ui.label("Layer");
+                let combo = craft_ui::ComboBox::from_id_salt("battman_layer").selected_text(r.layer.as_str()).show_ui(ui, |ui| {
                     for l in &layers {
                         if ui.selectable_label(*l == r.layer, l).clicked() && *l != r.layer {
                             action = act(edit("layer", json!(l)), apply);
                         }
                     }
                 });
+                combo.response.labelled_by(label.id);
                 ui.end_row();
             });
         }
