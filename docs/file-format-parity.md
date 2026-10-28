@@ -1,6 +1,6 @@
 # File-format parity
 
-> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-28 · **Change:** minor (MULTILEADER keeps its per-object overrides) · **Target:** Autodesk AutoCAD 2027
+> **Last reviewed:** 2026-10-10 · **Last updated:** 2026-10-28 · **Change:** minor (MLEADERSTYLE keeps its content, leader and block settings) · **Target:** Autodesk AutoCAD 2027
 
 Every format AutoCAD 2027 reads or writes, with CADCraft's support, fidelity and tests. Work
 items are in [gaps.md](gaps.md#file-formats); the weighted score feeds
@@ -95,7 +95,7 @@ on read with a note, so such files no longer exceed the DXF limit (#1482). **DWG
 | Tables: LAYER (+ transparency, description), LTYPE, STYLE, DIMSTYLE, BLOCK_RECORD | yes | yes | |
 | Tables: VPORT, VIEW, UCS, APPID | yes | yes: saved viewport configurations (#504), named views, UCSs | UCS elevation lost |
 | Objects: LAYOUT, DICTIONARY, XRECORD, TABLESTYLE, DIMASSOC | yes | yes | |
-| Objects: GROUP, MLINESTYLE, MLEADERSTYLE, IMAGEDEF, SCALE | yes | yes (groups #417, scale list #468) | |
+| Objects: GROUP, MLINESTYLE, MLEADERSTYLE, IMAGEDEF, SCALE | yes | yes (groups #417, scale list #468) | MLEADERSTYLE: no text attachment or angle settings; through DWG the maximum points, angle constraints, default text, block colour, scale, rotation and connection, break size, description and a true-colour text colour are lost (the acadrust bridge) |
 | Objects: VISUALSTYLE, PLOTSETTINGS, materials, field objects and other unmodelled objects | kept raw (#528) | written back as read; a proxy object (ACAD_PROXY_OBJECT) keeps its class: its group 91 is renumbered to the written CLASSES, which keep the class it names, and one whose number names no class is dropped (#1812) | not editable |
 | Foreign xdata, extension dictionaries, reactors, unmodelled objects, colour books | kept raw (#528); an entity's xdata is part of the entity, so COPY, MIRROR, ARRAY and paste keep it on the copies (EXPLODE pieces don't) | written back, handles remapped, references to deleted objects dropped | through DWG: xdata on table records and blocks, entity colour books and reactors, custom-class objects lost (acadrust) |
 | Objects: dynamic block data (ACAD_EVALUATION_GRAPH, BLOCK…PARAMETER, BLOCK…ACTION, grips) | read into a model (`dynblock`, `blocks.dynamic`): parameters, visibility states, value sets, stretch and lookup actions; references: their dynamic block, values and custom properties (`blocks.reference`, Properties ▸ Custom, read-only); kept raw (#528) | written back as read; a changed visibility state is written as AutoCAD writes it (a new anonymous block with its `AcDbBlockRepBTag`, the objects' `AcDbBlockRepETag`, the reference's representation data) | visibility states (and lookups that set only them) can be changed (`blocks.reference.set`, Properties ▸ Custom); distances, positions and the actions they drive not yet; DWG open and save keep it too (checked with an AutoCAD dynamic block) |
@@ -140,6 +140,7 @@ our output in AutoCAD black-box.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-28 | minor | MLEADERSTYLE: content type (170), maximum points (90), angle constraints (40, 41), leader type (173), leader colour, linetype and lineweight (91, 340, 92), landing (290, 291), description (3), default text (300), text colour and frame (93, 292), block (343), block colour, scale, rotation and connection (94, 47/49/140, 141, 177), scale (142) and break size (143) read and written instead of fixed values |
 | 2026-10-28 | minor | MULTILEADER: the leader colour (91), linetype (341) and lineweight (171), text colour (92 and the context's 90), text frame (292) and block colour (93) are read and written, flagged in the property override flags (90); an unflagged leader linetype is the style's (ByBlock) |
 | 2026-10-28 | minor | MULTILEADER: every leader root (`302 LEADER{`) is read and written with its own landing, dogleg and leader lines, through DXF and DWG, instead of the extra roots being folded into the first root's lines |
 | 2026-10-25 | minor | LAYOUT SAveas (`layout.saveas`) writes a layout as a drawing template: its page setup and paper space objects, no model space objects or other layouts, and only the named objects they use |

@@ -65,7 +65,7 @@ pub fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("mleaderstyle", "Multileader Style...", run_mleaderstyle)
             .menu(&["Format", "Multileader Style..."])
             .alias(&["mls"])
-            .params("{name, arrowSize?, textHeight?, landingGap?, dogleg?, textStyle?, annotative?, current?} → styles"),
+            .params("{name, arrowSize?, textHeight?, landingGap?, dogleg?, textStyle?, annotative?, content?: mtext|block|none, leaderType?: straight|spline|none, maxPoints?: 2..64, firstAngle?, secondAngle?: degrees 0..90 (0 = free), landing?: bool, leaderColor?, leaderLinetype?, leaderLineweight?, textColor?, textFrame?: bool, defaultText?, block?: name (\"\" for none), blockColor?, blockScale?, blockRotation?: degrees, blockCenter?: bool (attach by the extents centre, else the insertion point), scale?, breakSize?, description?, current?} → styles (new multileaders take these)"),
         CommandSpec::new("ddptype", "Point Style...", run_ptype)
             .menu(&["Format", "Point Style..."])
             .alias(&["ptype"])
@@ -1168,32 +1168,88 @@ fn run_mleaderstyle(s: &mut Session, p: &Value) -> Result<Value> {
                 d.mleader_styles.len() - 1
             }
         };
-        if let Some(st) = d.mleader_styles.get_mut(idx) {
-            let num = |k: &str| p.get(k).and_then(Value::as_f64).filter(|h| h.is_finite() && *h >= 0.0);
-            if let Some(v) = num("arrowSize") {
-                st.arrow_size = v;
-            }
-            if let Some(v) = num("textHeight").filter(|v| *v > 0.0) {
-                st.text_height = v;
-            }
-            if let Some(v) = num("landingGap") {
-                st.landing_gap = v;
-            }
-            if let Some(v) = num("dogleg") {
-                st.dogleg = v;
-            }
-            if let Some(t) = str_param(p, "textStyle") {
-                st.text_style = t.to_string();
-            }
-            if let Some(a) = p.get("annotative").and_then(Value::as_bool) {
-                st.annotative = a;
-            }
+        // Every value is checked on a copy first: a bad one changes nothing.
+        let mut st = d.mleader_styles.get(idx).cloned().unwrap_or_default();
+        let num = |k: &str| p.get(k).and_then(Value::as_f64).filter(|h| h.is_finite() && *h >= 0.0);
+        if let Some(v) = num("arrowSize") {
+            st.arrow_size = v;
+        }
+        if let Some(v) = num("textHeight").filter(|v| *v > 0.0) {
+            st.text_height = v;
+        }
+        if let Some(v) = num("landingGap") {
+            st.landing_gap = v;
+        }
+        if let Some(v) = num("dogleg") {
+            st.dogleg = v;
+        }
+        if let Some(t) = str_param(p, "textStyle") {
+            st.text_style = t.to_string();
+        }
+        if let Some(a) = p.get("annotative").and_then(Value::as_bool) {
+            st.annotative = a;
+        }
+        set_mleader_style_fields(d, &mut st, p)?;
+        if let Some(slot) = d.mleader_styles.get_mut(idx) {
+            *slot = st;
         }
         if bool_or(p, "current", true) {
             d.header.set_str("CMLEADERSTYLE", name);
         }
     }
     Ok(json!({ "current": d.header.str("CMLEADERSTYLE", "Standard"), "styles": serde_json::to_value(&d.mleader_styles).unwrap_or(Value::Null) }))
+}
+
+/// The `mleaderstyle` keys beyond the sizes and text style: content, leader and block settings.
+fn set_mleader_style_fields(d: &cadcraft_doc::Drawing, st: &mut cadcraft_doc::MLeaderStyle, p: &Value) -> Result<()> {
+    let err = |m: String| bad("mleaderstyle", m);
+    for key in [
+        "content",
+        "leaderType",
+        "maxPoints",
+        "firstAngle",
+        "secondAngle",
+        "landing",
+        "textFrame",
+        "blockCenter",
+        "defaultText",
+        "description",
+        "blockScale",
+        "blockRotation",
+        "scale",
+        "breakSize",
+    ] {
+        if let Some(v) = p.get(key) {
+            st.set_field(key, v).map_err(err)?;
+        }
+    }
+    let color = |key: &str| p.get(key).map(|c| parse_color(c).ok_or_else(|| err(format!("`{key}` is not a colour")))).transpose();
+    if let Some(c) = color("leaderColor")? {
+        st.leader_color = c;
+    }
+    if let Some(c) = color("textColor")? {
+        st.text_color = c;
+    }
+    if let Some(c) = color("blockColor")? {
+        st.block_color = c;
+    }
+    if let Some(n) = str_param(p, "leaderLinetype") {
+        st.leader_linetype = if n.eq_ignore_ascii_case("ByLayer") || n.eq_ignore_ascii_case("ByBlock") {
+            n.to_string()
+        } else {
+            d.linetype(n).map(|t| t.name.clone()).ok_or_else(|| err(format!("linetype `{n}` is not loaded")))?
+        };
+    }
+    if let Some(v) = p.get("leaderLineweight") {
+        st.leader_lineweight = super::layer::parse_lw(v).ok_or_else(|| err("bad `leaderLineweight`".into()))?;
+    }
+    if let Some(n) = str_param(p, "block") {
+        st.block = if n.trim().is_empty() { String::new() } else { super::mleader_content::block_name_in(d, n).map_err(|e| err(e.to_string()))? };
+    }
+    if st.content == cadcraft_doc::MLeaderContent::Block && st.block.is_empty() {
+        return Err(err("block content needs a `block`".into()));
+    }
+    Ok(())
 }
 
 fn run_ptype(s: &mut Session, p: &Value) -> Result<Value> {
