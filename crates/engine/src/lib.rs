@@ -132,6 +132,10 @@ pub struct Session {
     lisp_last: Option<std::result::Result<lisp::value::Value, String>>,
     /// What the last HATCHPICK kept (the Hatch and Gradient dialog's picks).
     pub hatch_picks: Option<cmd::hatch::HatchPicks>,
+    /// The last area, perimeter and distance measured (AREA, PERIMETER, DISTANCE).
+    pub measured: sysvars::Measured,
+    /// USERS1-USERS5: text kept for scripts and programs for the session (not saved).
+    pub users: [String; 5],
 }
 
 impl Default for Session {
@@ -182,6 +186,8 @@ impl Session {
             lisp: lisp::LispState::default(),
             lisp_last: None,
             hatch_picks: None,
+            measured: sysvars::Measured::default(),
+            users: Default::default(),
         }
     }
 
