@@ -38,6 +38,7 @@ fn mleader_kind(s: &Session, pts: &[Vec2], text: &str, landing: bool) -> Option<
         spline: false,
         block: None,
         roots: Vec::new(),
+        ..Default::default()
     }))
 }
 

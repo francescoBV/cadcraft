@@ -210,7 +210,7 @@ fn entity_parts(b: &mut Builder, ctx: &Ctx, e: &Entity) {
                 b.tris(ctx, rgb, &g.tris);
             }
         }
-        EntityKind::MLeader(m) => draw_mleader(b, ctx, e, m, rgb, lw),
+        EntityKind::MLeader(m) => super::mleader::draw(b, ctx, e, m, rgb, lw, lt.as_ref(), ltscale),
         EntityKind::Point(p) => {
             // Relative sizes follow the view: undo the block / viewport scale.
             let view = b.opts.view_height / ctx.xf.scale_factor().max(1e-12);
@@ -251,26 +251,6 @@ fn entity_parts(b: &mut Builder, ctx: &Ctx, e: &Entity) {
                 }
             }
         }
-    }
-}
-
-fn draw_mleader(b: &mut Builder, ctx: &Ctx, e: &Entity, m: &cadcraft_doc::MLeader, rgb: Ink, lw: f32) {
-    // Straight or spline leader lines of every root, each root's dogleg towards the content;
-    // block content draws like a block reference.
-    for pts in m.leader_paths() {
-        b.polyline(ctx, rgb, lw, &pts);
-        if let (Some(a), Some(n)) = (pts.first(), pts.get(1)) {
-            b.tris(ctx, rgb, &dim::arrow(*a, (*a - *n).normalized(), m.arrow_size));
-        }
-    }
-    for dogleg in m.dogleg_lines() {
-        b.polyline(ctx, rgb, lw, &dogleg);
-    }
-    if let Some(t) = &m.text {
-        mtext(b, ctx, t, rgb, lw);
-    }
-    if let Some(ins) = &m.block {
-        insert(b, ctx, e, ins, rgb);
     }
 }
 

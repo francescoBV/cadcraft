@@ -51,6 +51,7 @@ fn mleader_drawing() -> (Drawing, MLeader) {
         spline: false,
         block: None,
         roots: Vec::new(),
+        ..Default::default()
     };
     d.add(&Space::Model, Common { layer: "0".into(), ..Common::default() }, EntityKind::MLeader(m.clone())).unwrap();
     (d, m)

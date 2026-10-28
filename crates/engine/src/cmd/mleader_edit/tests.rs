@@ -198,6 +198,7 @@ mod units {
             spline: false,
             block: None,
             roots: Vec::new(),
+            ..Default::default()
         }
     }
 
@@ -212,6 +213,7 @@ mod units {
             spline: false,
             block: None,
             roots: Vec::new(),
+            ..Default::default()
         }
     }
 

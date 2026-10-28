@@ -324,6 +324,7 @@ fn annotative_mtext_columns_follow_the_scale() {
             spline: false,
             block: None,
             roots: Vec::new(),
+            ..Default::default()
         }),
         ..e.clone()
     };

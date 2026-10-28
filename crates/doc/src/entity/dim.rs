@@ -215,6 +215,24 @@ pub struct MLeader {
     /// [`MLeader::dogleg`] and [`MLeader::leaders`].
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub roots: Vec<super::MLeaderRoot>,
+    /// Colour of the leader lines, doglegs and arrowheads (ByBlock: the multileader's own).
+    #[serde(default = "super::mleader::byblock", skip_serializing_if = "super::mleader::is_byblock")]
+    pub leader_color: cadcraft_color::Color,
+    /// Linetype of the leader lines and doglegs (ByBlock: the multileader's own).
+    #[serde(default = "super::mleader::byblock_name", skip_serializing_if = "super::mleader::is_byblock_name")]
+    pub leader_linetype: String,
+    /// Lineweight of the leader lines, doglegs and arrowheads (ByBlock: the multileader's own).
+    #[serde(default = "super::mleader::byblock_lw", skip_serializing_if = "super::mleader::is_byblock_lw")]
+    pub leader_lineweight: super::Lineweight,
+    /// Colour of the text (ByBlock: the multileader's own).
+    #[serde(default = "super::mleader::byblock", skip_serializing_if = "super::mleader::is_byblock")]
+    pub text_color: cadcraft_color::Color,
+    /// A frame is drawn around the text, the style's landing gap away from it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub text_frame: bool,
+    /// Colour of the block content (ByBlock: the multileader's own).
+    #[serde(default = "super::mleader::byblock", skip_serializing_if = "super::mleader::is_byblock")]
+    pub block_color: cadcraft_color::Color,
 }
 
 impl MLeader {

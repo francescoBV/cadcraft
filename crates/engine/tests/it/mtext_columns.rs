@@ -115,6 +115,7 @@ fn scale_scales_multileader_text_width_and_columns() {
         spline: false,
         block: None,
         roots: Vec::new(),
+        ..Default::default()
     };
     let h = s.add_entity(EntityKind::MLeader(ml)).unwrap();
     s.execute("scale", &json!({ "handles": [h.hex()], "base": [0, 0], "factor": 2 })).unwrap();

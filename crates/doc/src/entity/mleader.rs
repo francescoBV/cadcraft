@@ -5,10 +5,30 @@
 //! has a root on each side) are [`MLeader::roots`]. Each root's dogleg runs from its landing
 //! towards the content, so a root right of the text has its dogleg pointing left.
 
+use cadcraft_color::Color;
 use cadcraft_geom::{Vec2, Vec3};
 use serde::{Deserialize, Serialize};
 
-use super::MLeader;
+use super::{Lineweight, MLeader};
+
+pub(super) fn byblock() -> Color {
+    Color::ByBlock
+}
+pub(super) fn is_byblock(c: &Color) -> bool {
+    *c == Color::ByBlock
+}
+pub(super) fn byblock_name() -> String {
+    "ByBlock".into()
+}
+pub(super) fn is_byblock_name(s: &str) -> bool {
+    s.eq_ignore_ascii_case("ByBlock")
+}
+pub(super) fn byblock_lw() -> Lineweight {
+    Lineweight::ByBlock
+}
+pub(super) fn is_byblock_lw(l: &Lineweight) -> bool {
+    *l == Lineweight::ByBlock
+}
 
 /// A further leader root of a multileader: a landing with its own leader lines.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -42,6 +62,12 @@ impl Default for MLeader {
             spline: false,
             block: None,
             roots: Vec::new(),
+            leader_color: Color::ByBlock,
+            leader_linetype: byblock_name(),
+            leader_lineweight: Lineweight::ByBlock,
+            text_color: Color::ByBlock,
+            text_frame: false,
+            block_color: Color::ByBlock,
         }
     }
 }
@@ -173,6 +199,19 @@ impl MLeader {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn json_without_overrides_reads_them_byblock_and_writes_none() {
+        let json = r#"{"leaders":[],"landing":{"x":1,"y":1,"z":0},"dogleg":0.5,"text":null}"#;
+        let m: MLeader = serde_json::from_str(json).unwrap_or_default();
+        assert_eq!((m.leader_color, m.text_color, m.block_color), (Color::ByBlock, Color::ByBlock, Color::ByBlock));
+        assert_eq!((m.leader_linetype.as_str(), m.leader_lineweight, m.text_frame), ("ByBlock", Lineweight::ByBlock, false));
+        let back = serde_json::to_string(&m).unwrap_or_default();
+        assert!(!back.contains("leaderColor") && !back.contains("textFrame"), "{back}");
+        let set = MLeader { leader_color: Color::Index(1), leader_linetype: "DASHED".into(), text_frame: true, ..m };
+        let json = serde_json::to_string(&set).unwrap_or_default();
+        assert_eq!(serde_json::from_str::<MLeader>(&json).ok(), Some(set));
+    }
+
     use super::*;
     use crate::MText;
 

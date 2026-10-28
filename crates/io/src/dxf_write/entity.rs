@@ -489,6 +489,7 @@ fn write_annotations_entity(w: &mut W, d: &Drawing, e: &Entity, owner: &str, pap
                 style: cx.mleader_style(&m.style),
                 text_style: m.text.as_ref().and_then(|t| cx.style(&t.style)),
                 block: m.block.as_ref().and_then(|b| cx.block_records.get(&b.block.to_ascii_uppercase()).cloned()),
+                linetype: cx.ltypes.get(&m.leader_linetype.trim().to_ascii_uppercase()).cloned(),
             };
             w.t.extend(crate::dxf_mleader::entity_tags(d, m, &refs));
         }

@@ -38,6 +38,7 @@ fn text_mleader() -> MLeader {
         spline: false,
         block: None,
         roots: Vec::new(),
+        ..Default::default()
     }
 }
 
@@ -133,6 +134,7 @@ fn spline_leader_with_block_content_and_attributes() {
         spline: true,
         block: Some(ins),
         roots: Vec::new(),
+        ..Default::default()
     };
     d.add(&Space::Model, Common::default(), EntityKind::MLeader(m.clone())).unwrap();
     let (_, back) = roundtrip(&d);

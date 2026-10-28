@@ -367,6 +367,7 @@ mod tests {
             spline: false,
             block: None,
             roots: Vec::new(),
+            ..Default::default()
         };
         let b = bounds(EntityKind::MLeader(ml.clone()));
         // The glyph spans x 25.45..28.78, y -2.5..2.5.
