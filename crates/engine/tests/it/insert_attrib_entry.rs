@@ -1,7 +1,7 @@
 //! INSERT and the attribute modes (gap F17): Verify attributes are asked twice, Preset ones take
-//! their default without asking, ATTREQ 0 gives every attribute its default, and ATTDIA 1 asks
-//! for the values all at once in the Edit Attributes dialog (`Session::attribute_entry`), typed
-//! answers still working. The JSON form never asks. ATTREQ and ATTDIA are user settings, as in
+//! their default without asking, ATTREQ 0 gives every attribute its default, ATTDIA 0 (the
+//! default) asks at the command line and ATTDIA 1 asks for the values all at once in the Edit
+//! Attributes dialog (`Session::attribute_entry`), typed answers still working. The JSON form never asks. ATTREQ and ATTDIA are user settings, as in
 //! AutoCAD (DWG keeps them in its header only before R2000).
 
 use std::sync::Arc;
@@ -36,7 +36,7 @@ fn def(tag: &str, prompt: &str, default: &str, y: f64, constant: bool, modes: At
 }
 
 /// Block T with the definitions A (Verify), B (Preset), C (plain) and D (constant); ATTREQ and
-/// ATTDIA as given (their defaults, 1, otherwise).
+/// ATTDIA as given (their defaults, ATTREQ 1 and ATTDIA 0, otherwise).
 fn session(attreq: Option<bool>, attdia: Option<bool>) -> Session {
     let mut d = cadcraft_engine::doc::Drawing::new_imperial();
     let mut b = Block::new("T");
@@ -87,7 +87,10 @@ fn pairs(v: &[(&str, &str)]) -> Vec<(String, String)> {
 
 #[test]
 fn typed_insert_asks_verify_twice_and_skips_preset_and_constant() {
-    let mut s = session(None, Some(false));
+    // AutoCAD's default, ATTDIA 0, with no value in the drawing: the command line asks.
+    let mut s = session(None, None);
+    assert_eq!(s.execute("getvar", &json!({ "name": "ATTDIA" })).unwrap()["value"], 0);
+    assert_eq!(s.execute("getvar", &json!({ "name": "ATTREQ" })).unwrap()["value"], 1);
     insert_up_to_the_attributes(&mut s);
     assert!(s.attribute_entry().is_none(), "ATTDIA 0: no dialog");
     assert_eq!(s.prompt_text(), "INSERT First <1>:", "A first");
@@ -128,10 +131,9 @@ fn attreq_0_gives_every_attribute_its_default() {
 
 #[test]
 fn attdia_1_asks_for_every_value_at_once_and_typed_answers_still_work() {
-    // AutoCAD's default, ATTDIA 1, with no value in the drawing.
     let mut s = session(None, None);
+    s.execute("setvar", &json!({ "name": "ATTDIA", "value": 1 })).unwrap();
     assert_eq!(s.execute("getvar", &json!({ "name": "ATTDIA" })).unwrap()["value"], 1);
-    assert_eq!(s.execute("getvar", &json!({ "name": "ATTREQ" })).unwrap()["value"], 1);
     s.start("insert").unwrap();
     s.cmdline("T").unwrap();
     assert!(s.attribute_entry().is_none(), "not before the attribute prompts");
@@ -183,7 +185,7 @@ fn json_insert_never_asks_whatever_attreq_and_attdia_say() {
 
 #[test]
 fn hostile_values_never_panic() {
-    let mut s = session(None, None);
+    let mut s = session(None, Some(true));
     insert_up_to_the_attributes(&mut s);
     let e = s.attribute_entry().expect("asks");
     // Too few answers take the defaults, too many are ignored.

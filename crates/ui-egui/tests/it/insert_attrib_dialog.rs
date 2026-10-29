@@ -13,9 +13,11 @@ use egui_kittest::Harness;
 use egui_kittest::kittest::{Queryable, by};
 use serde_json::json;
 
-/// Block T with the definitions A ("Room", default "101") and B ("Floor", default "1").
+/// Block T with the definitions A ("Room", default "101") and B ("Floor", default "1"), and
+/// ATTDIA 1 (the default is 0, the command line).
 fn app() -> CadApp {
     let mut app = CadApp::new(Session::new(), Services::default());
+    app.run("setvar", json!({ "name": "ATTDIA", "value": 1 })).unwrap();
     let a = app.run("attdef", json!({ "tag": "A", "prompt": "Room", "default": "101", "at": [0, 2] })).unwrap();
     let b = app.run("attdef", json!({ "tag": "B", "prompt": "Floor", "default": "1", "at": [0, 4] })).unwrap();
     app.run("block", json!({ "name": "T", "base": [0, 0], "handles": [a["handle"], b["handle"]], "keep": "delete" })).unwrap();
@@ -118,7 +120,16 @@ fn cancel_inserts_nothing() {
 #[test]
 fn no_dialog_with_attdia_0_or_from_json() {
     let mut a = app();
-    a.session.settings.attdia = false;
+    a.run("setvar", json!({ "name": "ATTDIA", "value": 0 })).unwrap();
+    insert(&mut a);
+    let h = harness(a);
+    assert!(h.query_by_label("Edit Attributes").is_none());
+    assert!(h.state().session.prompt_text().contains("Room"), "asked at the command line");
+
+    // ATTDIA's default, 0, asks at the command line too.
+    let mut a = app();
+    a.session.settings = Default::default();
+    assert!(!a.session.settings.attdia);
     insert(&mut a);
     let h = harness(a);
     assert!(h.query_by_label("Edit Attributes").is_none());

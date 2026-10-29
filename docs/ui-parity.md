@@ -149,7 +149,7 @@ down-arrow options menu (DYNPROMPT), and DYNDIM.
 | Clickable keywords in the prompt | yes | yes (`cmdline.rs:253-267`) |
 | UNDO with Mark, Back, BEgin, End, Auto, Control | yes | count only, whole-document snapshots capped at 2,000 (`lib.rs:477`, `edit.rs:56`) |
 | SETVAR for every system variable | ~1,000 sysvars | about 60 session/header variables by name (`sysvars.rs`) |
-| Attribute values when inserting (ATTREQ, ATTDIA, Verify, Preset) | prompts or the Edit Attributes dialog | both: ATTDIA 1 opens Edit Attributes (OK, Enter, Cancel; typed answers still work), ATTDIA 0 asks at the command line, Verify attributes asked twice there, Preset ones and ATTREQ 0 take their defaults (`attentry.rs`); no Previous/Next pages (one scrolling list) |
+| Attribute values when inserting (ATTREQ, ATTDIA, Verify, Preset) | prompts or the Edit Attributes dialog | both: ATTDIA 1 opens Edit Attributes (OK, Enter, Cancel; typed answers still work), ATTDIA 0 (the default) asks at the command line, Verify attributes asked twice there, Preset ones and ATTREQ 0 take their defaults (`attentry.rs`); no Previous/Next pages (one scrolling list) |
 | Scripts (SCRIPT, `.scr`) | yes | script text via CLI/MCP/control; no `.scr` file command |
 | Floating/docked command window, transparency, lines of history | yes | floating overlay, history lines setting |
 

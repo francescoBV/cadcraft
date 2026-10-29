@@ -131,7 +131,7 @@ pub struct Settings {
     /// default value. A user setting, as in AutoCAD (not saved in the drawing).
     pub attreq: bool,
     /// ATTDIA: INSERT typed or from a menu asks for attribute values in the Edit Attributes
-    /// dialog (on by default, as in AutoCAD); off asks at the command line.
+    /// dialog; off (the default, as in AutoCAD) asks at the command line.
     pub attdia: bool,
 }
 
@@ -198,7 +198,7 @@ impl Default for Settings {
             polardist: 0.0,
             auditctl: false,
             attreq: true,
-            attdia: true,
+            attdia: false,
         }
     }
 }
