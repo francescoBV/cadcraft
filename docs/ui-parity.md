@@ -61,7 +61,7 @@ ignored; there are no context menus. Remaining: **≈ 110–170 Opus 5.5 hours**
 |---|---|---|
 | Endpoint | every curve, solid/3D vertices, dimension ends | lines, arcs, polyline segments, open ellipses and splines, ray base, solid/trace corners |
 | Midpoint | every curve incl. ellipse/spline arcs, polyline segments | segments only; **none on circles, ellipses, splines** |
-| Center | arcs, circles, ellipses, polyarcs | arcs, circles, ellipses, polyline arcs (also inside block references); found with the cursor on the curve, however far the center is, as in AutoCAD (`snap.rs` `curve_centers`) |
+| Center | arcs, circles, ellipses, polyarcs | arcs, circles, ellipses, polyline arcs (also inside block references); found with the cursor on the curve, however far the center is, when no snap point is in the aperture, as in AutoCAD (`snap.rs` `curve_centers`) |
 | Geometric center | any closed polyline, spline | closed LWPOLYLINE only |
 | Node | points, dimension definition points, text alignment points | POINT only |
 | Quadrant | circles, arcs, ellipses | yes |
@@ -203,7 +203,7 @@ down-arrow options menu (DYNPROMPT), and DYNDIM.
 
 | Date | Change | Summary |
 |---|---|---|
-| 2026-10-27 | minor | Center snaps from the curve: with the cursor on a circle, arc, ellipse or polyline arc (in block references too) the running Center snap finds its center, a nearer endpoint or intersection still winning; Tab cycling offers it |
+| 2026-10-27 | minor | Center snaps from the curve: with the cursor on a circle, arc, ellipse or polyline arc (in block references too) the running Center snap finds its center when no snap point (Endpoint, Midpoint, Quadrant, Intersection) is in the aperture; through layout viewports too; Tab cycling offers it |
 | 2026-10-22 | minor | Polyline segment midpoint grips use rectangles, distinct from square vertex grips, with matching hover and pick bounds (#1950) |
 | 2026-10-13 | minor | Filled-region highlight boundaries are traversed in deterministic coordinate order, fixing dash-phase jumps on CPU hover/selection redraws and GPU highlight rebuilds; CPU dash-position, pixel and GPU mesh regressions |
 | 2026-10-14 | minor | Selection cycling (#1143): the list and badge of SELECTIONCYCLING, Shift+Space through overlapping objects (#1145) |

@@ -116,3 +116,85 @@ fn the_cursor_query_snaps_to_the_center_from_the_curve() {
     assert_eq!(r.snap.map(|h| h.mode), Some(mode::CEN));
     assert!(r.point.near(Vec2::ZERO, 1e-9), "{:?}", r.point);
 }
+
+/// The arc of the review of #2347 (and #1114's test): center (100,50), radius 80, 30°-150°.
+fn review_arc() -> Session {
+    let mut s = Session::new();
+    s.execute("arc", &json!({ "center": [100, 50], "radius": 80, "start": 30, "end": 150 })).unwrap();
+    s
+}
+
+#[test]
+fn a_midpoint_under_the_cursor_beats_the_center_from_the_curve() {
+    let s = review_arc();
+    // On the arc's midpoint (100,130) with Center and Midpoint running: Midpoint, as in AutoCAD.
+    for cursor in [Vec2::new(100.05, 130.0), Vec2::new(100.2, 130.1)] {
+        assert_eq!(snap_at(&s, cursor, 0.5, mode::CEN | mode::MID), Some((Vec2::new(100.0, 130.0), mode::MID)), "at {cursor:?}");
+        assert_eq!(snap_at(&s, cursor, 0.5, mode::MID), Some((Vec2::new(100.0, 130.0), mode::MID)), "at {cursor:?}");
+    }
+    // Elsewhere on the arc, with no snap point in the aperture, the center from the curve.
+    let (p, m) = snap_at(&s, polar(Vec2::new(100.0, 50.0), 80.1, 70.0), 0.5, mode::CEN | mode::MID).unwrap();
+    assert_eq!(m, mode::CEN);
+    assert!(p.near(Vec2::new(100.0, 50.0), 1e-9), "{p:?}");
+}
+
+#[test]
+fn a_quadrant_under_the_cursor_beats_the_center_from_the_curve() {
+    let mut s = Session::new();
+    s.execute("circle", &json!({ "center": [20, 0], "radius": 2 })).unwrap();
+    let cursor = Vec2::new(20.1, 2.0);
+    assert_eq!(snap_at(&s, cursor, 0.5, mode::CEN | mode::QUA), Some((Vec2::new(20.0, 2.0), mode::QUA)));
+    assert_eq!(snap_at(&s, cursor, 0.5, mode::QUA), Some((Vec2::new(20.0, 2.0), mode::QUA)));
+    // Away from the quadrants the center from the curve.
+    let (p, m) = snap_at(&s, polar(Vec2::new(20.0, 0.0), 2.1, 45.0), 0.5, mode::CEN | mode::QUA).unwrap();
+    assert_eq!(m, mode::CEN);
+    assert!(p.near(Vec2::new(20.0, 0.0), 1e-9), "{p:?}");
+}
+
+#[test]
+fn many_straight_segments_do_not_hide_a_circle_from_center() {
+    // A polyline of 2,500 straight segments zigzagging over the cursor, then a circle: the
+    // work limit counts circles and arcs only, so the circle's center is still found.
+    let mut s = Session::new();
+    let vertices: Vec<[f64; 2]> = (0..=2500).map(|i| [i as f64 * 0.04, if i % 2 == 0 { 0.0 } else { 100.0 }]).collect();
+    s.execute("pline", &json!({ "vertices": vertices })).unwrap();
+    s.execute("circle", &json!({ "center": [50, 50], "radius": 20 })).unwrap();
+    let (p, m) = snap_at(&s, polar(Vec2::new(50.0, 50.0), 20.2, 100.0), 0.5, mode::CEN).unwrap();
+    assert_eq!(m, mode::CEN);
+    assert!(p.near(Vec2::new(50.0, 50.0), 1e-9), "{p:?}");
+}
+
+#[test]
+fn a_viewport_center_keeps_its_curve_distance_against_paper_space() {
+    use cadcraft_engine::doc::{Circle, Drawing, Viewport};
+    let mut d = Drawing::new_imperial();
+    let paper = Space::Paper("Layout1".into());
+    // Model circle (10,0) r16 seen through a viewport at half scale: paper center (100,50), radius 8.
+    d.add(&Space::Model, Common::default(), EntityKind::Circle(Circle { center: Vec3::new(10.0, 0.0, 0.0), radius: 16.0 })).unwrap();
+    let vp = Viewport {
+        center: Vec3::new(100.0, 50.0, 0.0),
+        width: 20.0,
+        height: 20.0,
+        view_center: Vec2::new(10.0, 0.0),
+        view_height: 40.0,
+        id: 2,
+        locked: false,
+        frozen_layers: Vec::new(),
+        layer_colors: Vec::new(),
+        clip: None,
+        on: true,
+    };
+    d.add(&paper, Common::default(), EntityKind::Viewport(vp)).unwrap();
+    // A small paper-space circle whose curve passes 0.3 from the cursor and whose center is
+    // nearer the cursor (3.3) than the model circle's (8).
+    d.add(&paper, Common::default(), EntityKind::Circle(Circle { center: Vec3::new(108.0, 53.3, 0.0), radius: 3.0 })).unwrap();
+    // The cursor is on the model circle (0.1 off in paper units): its center wins.
+    let h = snap::osnap(&d, &paper, Vec2::new(108.1, 50.0), 0.5, mode::CEN, None, false).unwrap();
+    assert_eq!(h.mode, mode::CEN);
+    assert!(h.point.near(Vec2::new(100.0, 50.0), 1e-9), "{h:?}");
+    assert!(h.viewport.is_some());
+    // On the paper circle, away from the model one: its center.
+    let h = snap::osnap(&d, &paper, Vec2::new(108.0, 56.35), 0.5, mode::CEN, None, false).unwrap();
+    assert!(h.point.near(Vec2::new(108.0, 53.3), 1e-9), "{h:?}");
+    assert!(h.viewport.is_none());
+}
