@@ -90,6 +90,13 @@ fn multiple_lines_on_and_off() {
     let c = definition(s.doc().unwrap(), "C");
     let ml = c.multiline.as_ref().unwrap();
     assert_eq!((ml.mtext.width, ml.mtext.height, c.text.height), (30.0, 0.5, 0.5));
+    // No width keeps it; an explicit 0 removes the wrapping.
+    s.execute("battman", &json!({ "name": "T", "action": "edit", "tag": "C", "multiline": true, "prompt": "Room" })).unwrap();
+    assert_eq!(definition(s.doc().unwrap(), "C").multiline.unwrap().mtext.width, 30.0, "omitted width kept");
+    s.execute("battman", &json!({ "name": "T", "action": "edit", "tag": "C", "multiline": true, "width": null })).unwrap();
+    assert_eq!(definition(s.doc().unwrap(), "C").multiline.unwrap().mtext.width, 30.0, "null width kept");
+    s.execute("battman", &json!({ "name": "T", "action": "edit", "tag": "C", "multiline": true, "width": 0 })).unwrap();
+    assert_eq!(definition(s.doc().unwrap(), "C").multiline.unwrap().mtext.width, 0.0, "explicit 0: no wrapping");
 
     // Single-line again: the lines joined by spaces, in the definition and the references.
     s.execute("attedit", &json!({ "handle": ins.hex(), "values": { "C": "first\nsecond" } })).unwrap();
@@ -157,7 +164,8 @@ fn typed_battman_asks_for_the_new_modes() {
 fn hostile_params_never_panic() {
     let (mut s, _) = session();
     let before = definition(s.doc().unwrap(), "C");
-    for bad in [json!(-3), json!(-1e308)] {
+    // A negative width, or one that is not a number, is refused (it used to become 0).
+    for bad in [json!(-3), json!(-1e308), json!("12"), json!("wide"), json!(true), json!([12])] {
         assert!(s.execute("battman", &json!({ "name": "T", "action": "edit", "tag": "C", "multiline": true, "width": bad })).is_err(), "{bad}");
     }
     assert_eq!(definition(s.doc().unwrap(), "C"), before, "a refused edit changes nothing");

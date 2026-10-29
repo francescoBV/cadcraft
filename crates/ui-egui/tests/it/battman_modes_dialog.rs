@@ -60,3 +60,26 @@ fn check_boxes_switch_the_modes_and_multiple_lines() {
     h.state_mut().run("u", json!({})).unwrap();
     assert_eq!(listed(h.state_mut())["multiline"], true, "undo brings Multiple lines back");
 }
+
+#[test]
+fn a_multiline_default_is_edited_on_several_lines() {
+    let mut h = harness();
+    // Single-line: a one-line field.
+    h.get_by_role_and_label(Role::TextInput, "Default");
+    assert!(h.query_by_role_and_label(Role::MultilineTextInput, "Default").is_none());
+    h.get_by_role_and_label(Role::CheckBox, "Multiple lines").click();
+    h.run_steps(3);
+    // Multiple lines on: Enter in the Default field is a line break, kept when the field loses focus.
+    h.get_by_role_and_label(Role::MultilineTextInput, "Default").focus();
+    h.run_steps(2);
+    h.key_press(egui::Key::End);
+    h.run_steps(1);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(1);
+    h.get_by_role_and_label(Role::MultilineTextInput, "Default").type_text("second");
+    h.run_steps(2);
+    assert_eq!(listed(h.state_mut())["default"], "101", "not committed while typing");
+    h.get_by_role_and_label(Role::TextInput, "Height").focus();
+    h.run_steps(3);
+    assert_eq!(listed(h.state_mut())["default"], "101\nsecond");
+}

@@ -16,7 +16,7 @@ pub(super) fn battman_spec() -> CommandSpec {
     CommandSpec::new("battman", "Block Attribute Manager...", run)
         .menu(&["Modify", "Object", "Attribute", "Block Attribute Manager..."])
         .params(
-            "{name, action?: \"list\" (default) | \"edit\" | \"remove\" | \"up\" | \"down\" | \"order\" | \"sync\", tag? (the definition to edit, remove or move; any case), newTag?, prompt?, default?, invisible?, constant?, verify?, preset?, lockPosition?, multiline?: bool (width?: its width, 0 = no wrapping), height?, layer?, order?: [every tag, in the new order], sync?: bool (default true: existing references follow, as with ATTSYNC)} → {block, attributes: [{tag, prompt, default, invisible, constant, verify, preset, lockPosition, multiline, height, layer}], references, synced?}",
+            "{name, action?: \"list\" (default) | \"edit\" | \"remove\" | \"up\" | \"down\" | \"order\" | \"sync\", tag? (the definition to edit, remove or move; any case), newTag?, prompt?, default?, invisible?, constant?, verify?, preset?, lockPosition?, multiline?: bool (width?: its width, 0 = no wrapping; omitted, a multiline definition keeps its width), height?, layer?, order?: [every tag, in the new order], sync?: bool (default true: existing references follow, as with ATTSYNC)} → {block, attributes: [{tag, prompt, default, invisible, constant, verify, preset, lockPosition, multiline, height, layer}], references, synced?}",
         )
         .interactive(|s| Ok(Box::new(BattmanM::new(s))))
 }
@@ -32,8 +32,11 @@ struct Change {
     verify: Option<bool>,
     preset: Option<bool>,
     lock_position: Option<bool>,
-    /// Multiple lines on (with the text's width) or off.
-    multiline: Option<Option<f64>>,
+    /// Multiple lines on or off.
+    multiline: Option<bool>,
+    /// With Multiple lines on: the text's width (0: no wrapping). `None` keeps a multiline
+    /// definition's width and gives a new one 0.
+    width: Option<f64>,
     height: Option<f64>,
     layer: Option<String>,
 }
@@ -193,13 +196,17 @@ fn edit(s: &mut Session, name: &str, tag: &str, c: &Change) -> Result<String> {
                     a.text.height = v;
                 }
                 match c.multiline {
-                    // Turning it on keeps a multiline text as it is (its width changes when given).
-                    Some(Some(w)) => match &mut a.multiline {
-                        Some(ml) if w > 0.0 => ml.mtext.width = w,
-                        Some(_) => {}
-                        None => set_multiline(a, Some(w)),
+                    // Turning it on keeps a multiline text as it is (its width changes when given,
+                    // 0 included: no wrapping).
+                    Some(true) => match &mut a.multiline {
+                        Some(ml) => {
+                            if let Some(w) = c.width {
+                                ml.mtext.width = w;
+                            }
+                        }
+                        None => set_multiline(a, Some(c.width.unwrap_or(0.0))),
                     },
-                    Some(None) => set_multiline(a, None),
+                    Some(false) => set_multiline(a, None),
                     None => {}
                 }
                 if let (Some(ml), Some(h)) = (&mut a.multiline, c.height) {
@@ -303,16 +310,17 @@ fn run(s: &mut Session, p: &Value) -> Result<Value> {
                 verify: opt_bool("verify"),
                 preset: opt_bool("preset"),
                 lock_position: opt_bool("lockPosition"),
-                multiline: match opt_bool("multiline") {
-                    Some(true) => {
-                        let w = p.get("width").and_then(Value::as_f64).unwrap_or(0.0);
+                multiline: opt_bool("multiline"),
+                // Read with Multiple lines on only; omitted, a multiline definition keeps its width.
+                width: match (opt_bool("multiline"), p.get("width")) {
+                    (Some(true), Some(v)) if !v.is_null() => {
+                        let w = v.as_f64().ok_or_else(|| bad("battman", "`width` must be a number"))?;
                         if !(w.is_finite() && w >= 0.0) {
                             return Err(bad("battman", "`width` must be zero or positive"));
                         }
-                        Some(Some(w))
+                        Some(w)
                     }
-                    Some(false) => Some(None),
-                    None => None,
+                    _ => None,
                 },
                 height,
                 layer: opt_str("layer"),
@@ -632,7 +640,7 @@ impl Interactive for BattmanM {
                             Prop::Verify => Change { verify: Some(v), ..Change::default() },
                             Prop::Preset => Change { preset: Some(v), ..Change::default() },
                             Prop::Lock => Change { lock_position: Some(v), ..Change::default() },
-                            _ => Change { multiline: Some(v.then_some(0.0)), ..Change::default() },
+                            _ => Change { multiline: Some(v), ..Change::default() },
                         }
                     }
                     Prop::Height => {

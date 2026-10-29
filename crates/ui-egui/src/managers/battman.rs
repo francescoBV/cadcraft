@@ -32,12 +32,14 @@ fn set_temp<T: Clone + Send + Sync + 'static>(ctx: &egui::Context, id: &str, v: 
     ctx.data_mut(|d| d.insert_temp(egui::Id::unique(id), v));
 }
 
-/// A text field committing on Enter / focus loss when changed (an empty value too).
+/// A text field committing on Enter / focus loss when changed (an empty value too); a
+/// `multiline` one takes Enter as a line break and commits on focus loss.
 ///
 /// `label` is the visible row label's widget id, so the field has an accessible name.
-fn text_field(ui: &mut egui::Ui, id: egui::Id, value: &str, label: egui::Id) -> Option<String> {
+fn text_field(ui: &mut egui::Ui, id: egui::Id, value: &str, label: egui::Id, multiline: bool) -> Option<String> {
     let mut buf = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_else(|| value.to_string());
-    let resp = ui.add(egui::TextEdit::singleline(&mut buf).id(id.with("te")).desired_width(180.0)).labelled_by(label);
+    let edit = if multiline { egui::TextEdit::multiline(&mut buf).desired_rows(3) } else { egui::TextEdit::singleline(&mut buf) };
+    let resp = ui.add(edit.id(id.with("te")).desired_width(180.0)).labelled_by(label);
     if resp.has_focus() {
         ui.data_mut(|d| d.insert_temp(id, buf.clone()));
     } else {
@@ -169,18 +171,19 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Option<
             let edit = |key: &str, v: Value| json!({ "name": block, "action": "edit", "tag": r.tag, key: v });
             egui::Grid::new("battman_edit").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
                 let label = ui.label("Tag");
-                if let Some(v) = text_field(ui, egui::Id::unique(("battman_tag", &block, &r.tag)), &r.tag, label.id) {
+                if let Some(v) = text_field(ui, egui::Id::unique(("battman_tag", &block, &r.tag)), &r.tag, label.id, false) {
                     action = act(edit("newTag", json!(v)), apply);
                     sel = Some(v.trim().to_ascii_uppercase());
                 }
                 ui.end_row();
                 let label = ui.label("Prompt");
-                if let Some(v) = text_field(ui, egui::Id::unique(("battman_prompt", &block, &r.tag)), &r.prompt, label.id) {
+                if let Some(v) = text_field(ui, egui::Id::unique(("battman_prompt", &block, &r.tag)), &r.prompt, label.id, false) {
                     action = act(edit("prompt", json!(v)), apply);
                 }
                 ui.end_row();
                 let label = ui.label("Default");
-                if let Some(v) = text_field(ui, egui::Id::unique(("battman_default", &block, &r.tag)), &r.default, label.id) {
+                // A multiline definition's default can hold several lines.
+                if let Some(v) = text_field(ui, egui::Id::unique(("battman_default", &block, &r.tag)), &r.default, label.id, r.multiline) {
                     action = act(edit("default", json!(v)), apply);
                 }
                 ui.end_row();
@@ -209,7 +212,7 @@ pub fn dialog(app: &mut CadApp, ctx: &egui::Context, open: &mut bool) -> Option<
                 });
                 ui.end_row();
                 let label = ui.label("Height");
-                let height = text_field(ui, egui::Id::unique(("battman_height", &block, &r.tag)), &fmt_num(r.height), label.id);
+                let height = text_field(ui, egui::Id::unique(("battman_height", &block, &r.tag)), &fmt_num(r.height), label.id, false);
                 if let Some(h) = height.and_then(|v| v.trim().parse::<f64>().ok()).filter(|h| h.is_finite() && *h > 0.0) {
                     action = act(edit("height", json!(h)), apply);
                 }
