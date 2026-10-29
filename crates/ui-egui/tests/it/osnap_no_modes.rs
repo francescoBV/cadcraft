@@ -83,3 +83,41 @@ fn f3_with_no_running_snaps_opens_drafting_settings() {
     assert_eq!(osmode(&h) & mode::END, mode::END);
     assert!(osnap_button_on(&h));
 }
+
+fn dialog_osnap_on(h: &Harness<'_, CadApp>) -> bool {
+    h.get_by_label("Object Snap On (F3)").accesskit_node().toggled() == Some(egui::accesskit::Toggled::True)
+}
+
+#[test]
+fn drafting_settings_object_snap_on_follows_the_status_bar() {
+    let mut h = harness();
+    h.state_mut().run("setvar", json!({"name": "OSMODE", "value": 0})).unwrap();
+    h.run_steps(2);
+    let n = h.state().session.log.len();
+    h.key_press(Key::F3);
+    h.run_steps(3);
+    assert_eq!(h.state().ui.dialog.as_deref(), Some("dsettings"));
+    // The command line says it in words, without the JSON form's syntax.
+    let echoed = h.state().session.log[n..].to_vec();
+    assert!(echoed.iter().any(|l| l.contains("No running object snaps")), "{echoed:?}");
+    assert!(echoed.iter().all(|l| !l.contains(['{', '['])), "{echoed:?}");
+    // OSMODE 0: the dialog's "Object Snap On (F3)" is off, like the status bar's button.
+    assert!(!osnap_button_on(&h));
+    assert!(!dialog_osnap_on(&h), "no running mode: not shown on");
+    // Picking a mode turns it on, in the dialog too.
+    h.get_by_label("Endpoint").click();
+    h.run_steps(3);
+    assert_eq!(osmode(&h), mode::END);
+    assert!(dialog_osnap_on(&h));
+    assert!(osnap_button_on(&h));
+    // Unticking it sets the F3 bit and keeps the mode; ticking it again clears it.
+    h.get_by_label("Object Snap On (F3)").click();
+    h.run_steps(3);
+    assert_eq!(osmode(&h), mode::END | mode::OFF);
+    assert!(!dialog_osnap_on(&h));
+    assert!(!osnap_button_on(&h));
+    h.get_by_label("Object Snap On (F3)").click();
+    h.run_steps(3);
+    assert_eq!(osmode(&h), mode::END);
+    assert!(dialog_osnap_on(&h));
+}

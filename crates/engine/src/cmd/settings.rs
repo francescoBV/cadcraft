@@ -156,14 +156,16 @@ fn run_osnap(s: &mut Session, p: &Value) -> Result<Value> {
     let on = osmode & mode::OFF == 0 && has_modes(osmode);
     let active: Vec<&str> = mode::ALL.iter().filter(|(b, _)| osmode & b != 0).map(|(_, n)| *n).collect();
     // Turned on with no running snap set: nothing could snap. AutoCAD then shows the Object Snap
-    // settings; the reply says so (`noModes`), and the desktop app opens Drafting Settings.
+    // settings; the reply says so (`noModes`), and the desktop app opens Drafting Settings. The
+    // message is echoed on the command line, so the JSON way to set them is in `hint` only.
     if asked_on && !has_modes(osmode) {
         return Ok(json!({
             "on": false,
             "osmode": osmode,
             "modes": active,
             "noModes": true,
-            "message": "No running object snaps are set: choose them in Drafting Settings (DSETTINGS) or with OSNAP {\"modes\": [...]}",
+            "message": "No running object snaps are set: choose them in Drafting Settings.",
+            "hint": "Set them with OSNAP {\"modes\": [\"end\", \"mid\", ...]} or {\"osmode\": N}.",
         }));
     }
     Ok(json!({ "on": on, "osmode": osmode, "modes": active, "message": format!("<Osnap {}>", if on { "on" } else { "off" }) }))

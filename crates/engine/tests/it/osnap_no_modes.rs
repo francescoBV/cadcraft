@@ -29,6 +29,9 @@ fn f3_with_no_running_snaps_reports_it() {
     assert_eq!(r["on"], json!(false));
     assert_eq!(s.settings.osmode, 0, "not turned off instead");
     assert!(r["message"].as_str().unwrap().contains("No running object snaps"), "{r}");
+    // The message is echoed on the command line: plain words, the JSON form only in `hint`.
+    assert!(!r["message"].as_str().unwrap().contains(['{', '[', '"']), "{r}");
+    assert!(r["hint"].as_str().unwrap().contains("\"modes\""), "{r}");
     // Only the F3 bit set: the same.
     s.execute("setvar", &json!({ "name": "OSMODE", "value": mode::OFF })).unwrap();
     let r = osnap(&mut s, json!({ "on": true }));
