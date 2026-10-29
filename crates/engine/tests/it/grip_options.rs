@@ -419,3 +419,34 @@ fn hatch_grip_options_json_form_and_solid_fills() {
     s.cancel();
     assert!(s.execute("grip.option", &json!({ "handle": solid.hex(), "index": 0, "option": "hatchScale", "value": 2 })).is_err());
 }
+
+/// An out-of-range Hatch Scale says what to type (positive, within 1e-6..1e9), at the prompt and
+/// in the JSON form, instead of "degenerate object"; the prompt stays for another try.
+#[test]
+fn hatch_scale_out_of_range_says_what_to_type() {
+    let mut s = Session::new();
+    let h = pattern_hatch(&mut s, "ANSI31");
+    s.set_selection(vec![h]);
+    s.start_grip_edit(&[(h, 0)]).unwrap();
+    typed(&mut s, &["S"]);
+    for bad in ["0", "-2", "2e9", "1e-7"] {
+        s.log.clear();
+        typed(&mut s, &[bad]);
+        let e = s.log.join(" | ");
+        assert!(e.contains("positive") && e.contains("1e-6") && e.contains("1e9"), "{bad}: {e}");
+        assert!(!e.contains("degenerate"), "{bad}: {e}");
+        assert!(s.prompt_text().contains("** HATCH SCALE **"), "{bad}: {}", s.prompt_text());
+    }
+    // A picked point on the grip (scale 0) says the same.
+    s.log.clear();
+    typed(&mut s, &["5,5"]);
+    assert!(s.log.iter().any(|l| l.contains("1e-6")), "{:?}", s.log);
+    typed(&mut s, &["2"]);
+    assert!((hatch_of(&s, h).scale - 2.0).abs() < 1e-12);
+    for v in [0.0, -2.0, 2e9, 1e-7] {
+        let e = s.execute("grip.option", &json!({ "handle": h.hex(), "index": 0, "option": "hatchScale", "value": v })).unwrap_err();
+        let e = e.to_string();
+        assert!(e.contains("positive") && e.contains("1e-6") && e.contains("1e9") && !e.contains("degenerate"), "{v}: {e}");
+    }
+    assert!((hatch_of(&s, h).scale - 2.0).abs() < 1e-12);
+}

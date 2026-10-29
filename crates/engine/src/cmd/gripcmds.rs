@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use super::curves;
 use super::{CommandSpec, bad, bool_or, point_param, point_req, str_param, targets};
 
-use crate::grips::{GripAction, GripMode, grip_action, mode_matrix, stretch_grip};
+use crate::grips::{GripAction, GripMode, grip_action, hatch_scale_ok, mode_matrix, stretch_grip};
 use crate::{EngineError, Result, Session};
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -144,6 +144,12 @@ fn run_grip_option(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let e = curves::entity(s, h)?;
     let value = p.get("value").and_then(Value::as_f64).map(|v| if action == GripAction::HatchAngle { v.to_radians() } else { v });
+    if action == GripAction::HatchScale
+        && let Some(v) = value
+        && !hatch_scale_ok(v)
+    {
+        return Err(bad(cmd, "`value` (the hatch scale) must be a positive number from 1e-6 to 1e9"));
+    }
     let k = grip_action(&e.kind, i, action, point_param(p, "to"), value)
         .ok_or_else(|| bad(cmd, "that option doesn't apply to this grip, or the result would be degenerate"))?;
     s.doc_mut()?.modify_entity(h, |e| e.kind = k)?;

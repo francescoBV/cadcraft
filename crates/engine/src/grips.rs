@@ -421,6 +421,14 @@ fn patterned(h: &cadcraft_doc::Hatch) -> bool {
 /// fill of millions of lines, or of none).
 const HATCH_SCALE: std::ops::RangeInclusive<f64> = 1e-6..=1e9;
 
+/// What the Hatch Scale option takes, said when a typed or JSON value is out of range.
+pub const HATCH_SCALE_HINT: &str = "The hatch scale must be a positive number from 1e-6 to 1e9.";
+
+/// Whether `f` is a scale the Hatch Scale option sets (positive, within 1e-6..1e9).
+pub fn hatch_scale_ok(f: f64) -> bool {
+    HATCH_SCALE.contains(&f)
+}
+
 /// The multifunctional options of grip `index` of `kind` (empty when it has only Stretch):
 /// polyline vertices Add/Remove Vertex, polyline segment midpoints Add Vertex and Convert to
 /// Arc/Line, line and arc ends Lengthen, the arc midpoint Radius, a pattern hatch's centre grip
@@ -563,7 +571,7 @@ pub fn grip_action(kind: &EntityKind, index: usize, action: GripAction, to: Opti
                 (None, Some(p)) => grip.dist(p),
                 _ => return None,
             };
-            if !HATCH_SCALE.contains(&f) {
+            if !hatch_scale_ok(f) {
                 return None;
             }
             h.scale = f;
