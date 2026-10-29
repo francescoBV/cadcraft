@@ -30,7 +30,8 @@ use draw::{draw_drag_gpu, draw_highlight_gpu, draw_list_gpu, list_mesh_key, sele
 use dyn_boxes::dynamic_input;
 pub(crate) use dyn_boxes::length_units;
 use grid::draw_grid;
-use grips::{click_grip, ctrl_cycle, grip_at, grip_menu, grip_options, grip_rect};
+pub(crate) use grips::ctrl_cycle;
+use grips::{click_grip, grip_at, grip_menu, grip_options, grip_rect};
 use list::{PrimIndex, ensure_list, rebuilt_preview};
 #[cfg(test)]
 use list::{preview_options, prims_of};
@@ -760,7 +761,6 @@ pub fn show(app: &mut CadApp, ui: &mut egui::Ui) {
         dbl_middle: i.pointer.button_double_clicked(egui::PointerButton::Middle),
         dbl_primary: i.pointer.button_double_clicked(egui::PointerButton::Primary),
     });
-    ctrl_cycle(app, ui);
     let navigation = Navigation { rect, tiles: &tiles, response: &resp, xf, pointer };
     let Some((inside, on_menu)) = navigate_canvas(app, ui, &navigation) else { return };
     let PointerInput { hover_pos, mods, middle_down, pressed_primary, pressed_secondary, dbl_primary, .. } = pointer;

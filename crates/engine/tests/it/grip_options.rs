@@ -395,8 +395,16 @@ fn ctrl_leaves_grips_without_options_and_other_modes_alone() {
     let before = s.prompt_text();
     s.cycle_grip_option().unwrap();
     assert_eq!(s.prompt_text(), before);
-    // Typed, the hidden keyword is only text.
-    assert!(s.cmdline("*cycle*").is_err() || s.prompt_text() == before);
+    // Typed, the hidden keyword is only text: a polyline vertex (which has options) stays in
+    // STRETCH.
+    s.cancel();
+    let pl = pline(&mut s, &[[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]], false);
+    s.set_selection(vec![pl]);
+    s.start_grip_edit(&[(pl, grip_index(&s, pl, 10.0, 0.0))]).unwrap();
+    s.log.clear();
+    let _ = s.cmdline("*cycle*");
+    assert!(s.prompt_text().contains("** STRETCH **"), "{}", s.prompt_text());
+    assert!(!s.log.iter().any(|l| l.contains("** ADD VERTEX **")), "{:?}", s.log);
     // Other commands don't take it.
     s.cancel();
     s.cmdline("line").unwrap();

@@ -25,29 +25,39 @@ pub(super) fn click_grip(app: &mut CadApp, g: (Handle, usize), shift: bool) {
     }
 }
 
+/// At most this many Ctrl taps step the grip in one frame (input-derived: a cap on the work).
+const MAX_TAPS_PER_FRAME: usize = 16;
+
 /// Ctrl pressed and let go on its own while a grip is hot steps to the grip's next option
-/// (Stretch, Add Vertex, Remove Vertex…), as in AutoCAD. Ctrl held for a key, a click or a scroll
-/// (Ctrl+Z, Ctrl+click) is not a tap. A quick tap can go down and up within one frame, so the
-/// frame's modifier changes are followed in order.
-pub(super) fn ctrl_cycle(app: &mut CadApp, ui: &egui::Ui) {
-    /// Ctrl down (`Some(still a tap)`) or up; `tap` is set when a clean press ends.
-    fn step(state: Option<bool>, down: bool, tap: &mut bool) -> Option<bool> {
-        match (state, down) {
-            (None, true) => Some(true),
+/// (Stretch, Add Vertex, Remove Vertex…), as in AutoCAD. Ctrl held for a key, a click, a scroll
+/// or another modifier (Ctrl+Z, Ctrl+click, Ctrl+Shift) is not a tap. A quick tap can go down and
+/// up within one frame, so the frame's modifier changes are followed in order, and each clean tap
+/// steps once. Runs at the start of the frame's input, before the menu shortcuts consume their key
+/// presses, so a shortcut's key always spoils the tap (Ctrl+E with Ctrl let go before E too).
+pub(crate) fn ctrl_cycle(app: &mut CadApp, ctx: &egui::Context) {
+    /// Ctrl down (`Some(still a tap)`) or up; `taps` counts the clean presses that end. Another
+    /// modifier held with Ctrl (Shift, Alt, Cmd) spoils the tap.
+    fn step(state: Option<bool>, m: egui::Modifiers, taps: &mut usize) -> Option<bool> {
+        let others = m.shift || m.alt || m.mac_cmd;
+        match (state, m.ctrl) {
+            (None, true) => Some(!others),
+            (Some(clean), true) => Some(clean && !others),
             (Some(clean), false) => {
-                *tap |= clean;
+                if clean {
+                    *taps = taps.saturating_add(1);
+                }
                 None
             }
-            (state, _) => state,
+            (None, false) => None,
         }
     }
-    let (state, tap) = ui.input(|i| {
-        let (mut state, mut tap, mut changes) = (app.canvas.ctrl_tap, false, false);
+    let (state, taps) = ctx.input(|i| {
+        let (mut state, mut taps, mut changes) = (app.canvas.ctrl_tap, 0usize, false);
         for e in &i.events {
             match e {
                 egui::Event::ModifiersChanged(m) => {
                     changes = true;
-                    state = step(state, m.ctrl, &mut tap);
+                    state = step(state, *m, &mut taps);
                 }
                 egui::Event::PointerMoved(_) | egui::Event::MouseMoved(_) | egui::Event::PointerGone => {}
                 _ => state = state.map(|_| false),
@@ -55,13 +65,16 @@ pub(super) fn ctrl_cycle(app: &mut CadApp, ui: &egui::Ui) {
         }
         // An integration that only reports the modifiers' state.
         if !changes {
-            state = step(state, i.modifiers.ctrl, &mut tap);
+            state = step(state, i.modifiers, &mut taps);
         }
-        (state, tap)
+        (state, taps)
     });
     app.canvas.ctrl_tap = state;
-    if tap && let Err(e) = app.session.cycle_grip_option() {
-        app.session.echo(e.to_string());
+    for _ in 0..taps.min(MAX_TAPS_PER_FRAME) {
+        if let Err(e) = app.session.cycle_grip_option() {
+            app.session.echo(e.to_string());
+            break;
+        }
     }
 }
 

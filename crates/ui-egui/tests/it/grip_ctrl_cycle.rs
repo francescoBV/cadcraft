@@ -54,6 +54,26 @@ fn tap_ctrl(h: &mut Harness<'_, CadApp>, quick: bool) {
     h.run_steps(2);
 }
 
+/// Ctrl as egui-winit reports it on Windows and Linux: `command` is set with `ctrl`, so the
+/// Ctrl shortcuts (Ctrl+Z, Ctrl+E) fire.
+const CTRL: Modifiers = Modifiers { ctrl: true, command: true, ..Modifiers::NONE };
+
+/// Ctrl+`key`, one event per frame, with Ctrl let go before the key (`ctrl_up_first`, common in
+/// a quick chord) or after it.
+fn chord(h: &mut Harness<'_, CadApp>, key: egui::Key, ctrl_up_first: bool) {
+    let k = |pressed, modifiers| Event::Key { key, physical_key: None, pressed, repeat: false, modifiers };
+    let mut events = vec![Event::ModifiersChanged(CTRL), k(true, CTRL)];
+    if ctrl_up_first {
+        events.extend([Event::ModifiersChanged(Modifiers::NONE), k(false, Modifiers::NONE)]);
+    } else {
+        events.extend([k(false, CTRL), Event::ModifiersChanged(Modifiers::NONE)]);
+    }
+    for e in events {
+        h.event(e);
+        h.run_steps(2);
+    }
+}
+
 fn prompt(h: &Harness<'_, CadApp>) -> String {
     h.state().session.prompt_text()
 }
@@ -77,9 +97,8 @@ fn ctrl_steps_through_a_vertex_grips_options() {
     assert!(prompt(&h).contains("** REMOVE VERTEX **"), "{}", prompt(&h));
     tap_ctrl(&mut h, false);
     assert!(prompt(&h).contains("** STRETCH **"), "{}", prompt(&h));
-    // Ctrl+Z is not a tap: still STRETCH.
-    h.key_press_modifiers(Modifiers::CTRL, egui::Key::Z);
-    h.run_steps(3);
+    // Ctrl+Z is not a tap, even with Ctrl let go before Z.
+    chord(&mut h, egui::Key::Z, true);
     assert!(!prompt(&h).contains("** ADD VERTEX **"), "{}", prompt(&h));
     // To Remove Vertex again; a click anywhere removes the hot vertex.
     if h.state().session.running.is_none() {
@@ -101,4 +120,63 @@ fn ctrl_without_a_hot_grip_does_nothing() {
     tap_ctrl(&mut h, false);
     assert!(h.state().session.running.is_none());
     assert_eq!(vertex_count(&h, pl), 3);
+}
+
+/// A Ctrl shortcut never steps the grip, whether Ctrl comes up before or after its key: the tap
+/// is read before the shortcuts consume the key press.
+#[test]
+fn ctrl_shortcuts_are_not_taps() {
+    for (key, ctrl_up_first) in [(egui::Key::E, false), (egui::Key::E, true), (egui::Key::Num1, true), (egui::Key::Z, true)] {
+        let (mut h, _) = harness();
+        let grip = screen(&h, Vec2::new(10.0, 0.0));
+        click(&mut h, grip);
+        assert!(prompt(&h).contains("** STRETCH **"), "{}", prompt(&h));
+        h.state_mut().session.log.clear();
+        chord(&mut h, key, ctrl_up_first);
+        let case = format!("Ctrl+{key:?}, Ctrl up first: {ctrl_up_first}");
+        let log = h.state().session.log.join(" | ");
+        assert!(!log.contains("** ADD VERTEX **") && !prompt(&h).contains("** ADD VERTEX **"), "{case}: {log}");
+        match key {
+            egui::Key::E => {
+                assert!(log.contains("<Isoplane"), "{case}: the shortcut ran: {log}");
+                assert!(prompt(&h).contains("** STRETCH **"), "{case}: {}", prompt(&h));
+            }
+            egui::Key::Z => assert!(log.contains("Nothing to undo"), "{case}: the shortcut ran: {log}"),
+            _ => assert!(prompt(&h).contains("** STRETCH **"), "{case}: {}", prompt(&h)),
+        }
+    }
+}
+
+/// Ctrl with Shift or Alt is not a tap; two clean taps within one frame step twice.
+#[test]
+fn ctrl_with_another_modifier_is_not_a_tap_and_quick_taps_all_count() {
+    let (mut h, _) = harness();
+    let grip = screen(&h, Vec2::new(10.0, 0.0));
+    click(&mut h, grip);
+    let shift = Modifiers { shift: true, ..Modifiers::NONE };
+    let alt = Modifiers { alt: true, ..Modifiers::NONE };
+    // Ctrl down, Shift down, Ctrl up (Shift up after): not a tap.
+    for e in [CTRL, CTRL | shift, shift, Modifiers::NONE] {
+        h.event(Event::ModifiersChanged(e));
+        h.run_steps(2);
+    }
+    assert!(prompt(&h).contains("** STRETCH **"), "{}", prompt(&h));
+    // Shift held first, then Ctrl tapped: not a tap either.
+    for e in [shift, CTRL | shift, shift, Modifiers::NONE] {
+        h.event(Event::ModifiersChanged(e));
+        h.run_steps(2);
+    }
+    assert!(prompt(&h).contains("** STRETCH **"), "{}", prompt(&h));
+    // Ctrl+Alt within one frame.
+    for e in [CTRL, CTRL | alt, Modifiers::NONE] {
+        h.event(Event::ModifiersChanged(e));
+    }
+    h.run_steps(2);
+    assert!(prompt(&h).contains("** STRETCH **"), "{}", prompt(&h));
+    // Two clean taps in one frame: Add Vertex, then Remove Vertex.
+    for e in [CTRL, Modifiers::NONE, CTRL, Modifiers::NONE] {
+        h.event(Event::ModifiersChanged(e));
+    }
+    h.run_steps(2);
+    assert!(prompt(&h).contains("** REMOVE VERTEX **"), "{}", prompt(&h));
 }
